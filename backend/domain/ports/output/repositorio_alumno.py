@@ -1,0 +1,16 @@
+from typing import Protocol
+from ...models.alumno    import Alumno
+from ...value_objects    import UIDPulsera
+
+
+class RepositorioAlumno(Protocol):
+    def porUID(self, uid: UIDPulsera) -> Alumno | None: ...
+    def porULID(self, id: str)        -> Alumno | None: ...
+    def porFiltro(
+        self,
+        nombre:   str | None,
+        apellido: str | None,
+        dni:      str | None,
+    ) -> list[Alumno]: ...
+    def guardar(self, alumno: Alumno) -> None: ...
+    def eliminar(self, id: str)       -> None: ...
