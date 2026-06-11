@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../domain/entities/alumno.dart';
 import '../../domain/usecases/get_alumnos.dart';
-import '../../infrastructure/datasources/mock_datasource.dart';
-import '../../infrastructure/repositories/alumno_repository_impl.dart';
+import '../../infraestructure/datasources/mock_datasource.dart';
+import '../../infraestructure/repositories/alumno_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
 
 class AlumnosScreen extends StatefulWidget {
@@ -61,7 +61,7 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
               );
 
               final alumnos  = _applyFilters(snap.data!);
-              final cursoOpts = ['Todos', ...{...snap.data!.map((a) => a.curso)}..toList()..sort()];
+              final cursoOpts = ['Todos', ...snap.data!.map((a) => a.curso).toSet().toList()..sort()];
 
               return Padding(
                 padding: const EdgeInsets.all(32),

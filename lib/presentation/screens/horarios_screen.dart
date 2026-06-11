@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../domain/entities/curso.dart';
-import '../../infrastructure/datasources/mock_datasource.dart';
-import '../../infrastructure/repositories/curso_repository_impl.dart';
+import '../../infraestructure/datasources/mock_datasource.dart';
+import '../../infraestructure/repositories/curso_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
 
 class HorariosScreen extends StatefulWidget {
@@ -14,7 +14,6 @@ class HorariosScreen extends StatefulWidget {
 
 class _HorariosScreenState extends State<HorariosScreen> {
   late final CursoRepositoryImpl _repo;
-  late Future<List<Curso>> _future;
   String _especialidad = 'Informática';
 
   static const List<String> _especialidades = ['Informática', 'Electrónica', 'Construcciones'];
@@ -39,7 +38,6 @@ class _HorariosScreenState extends State<HorariosScreen> {
   void initState() {
     super.initState();
     _repo   = CursoRepositoryImpl(MockDatasource());
-    _future = _repo.getCursos();
   }
 
   @override
@@ -109,9 +107,9 @@ class _HorariosScreenState extends State<HorariosScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
-        color: AAMColors.mint.withOpacity(0.3),
+        color: AAMColors.mint.withAlpha((0.3 * 255).round()),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AAMColors.accent.withOpacity(0.3)),
+        border: Border.all(color: AAMColors.accent.withAlpha((0.3 * 255).round())),
       ),
       child: Row(children: [
         const Icon(Icons.info_outline, size: 18, color: AAMColors.accent),
@@ -226,12 +224,12 @@ class _CeldaHorarioState extends State<_CeldaHorario> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit:  (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
+        child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
         margin: const EdgeInsets.all(4),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
-          color: _hovered ? widget.celda.color : widget.celda.color.withOpacity(0.1),
+          color: _hovered ? widget.celda.color : widget.celda.color.withAlpha((0.1 * 255).round()),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -241,7 +239,7 @@ class _CeldaHorarioState extends State<_CeldaHorario> {
             overflow: TextOverflow.ellipsis),
           Text(widget.celda.curso,
             style: GoogleFonts.dmSans(fontSize: 10,
-              color: _hovered ? AAMColors.white.withOpacity(0.8) : AAMColors.textSec)),
+              color: _hovered ? AAMColors.white.withAlpha((0.8 * 255).round()) : AAMColors.textSec)),
         ]),
       ),
     );

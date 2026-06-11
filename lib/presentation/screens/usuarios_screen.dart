@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../domain/entities/usuario.dart';
 import '../../domain/usecases/crear_usuario.dart';
-import '../../infrastructure/datasources/mock_datasource.dart';
-import '../../infrastructure/repositories/usuario_repository_impl.dart';
+import '../../infraestructure/datasources/mock_datasource.dart';
+import '../../infraestructure/repositories/usuario_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
 
 class UsuariosScreen extends StatefulWidget {
@@ -39,7 +39,7 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
             AAMButton(
               label: 'Nuevo usuario',
               icon: Icons.person_add_outlined,
-              onPressed: () => setState(() => _showForm = !_showForm),
+              onPressed: () { setState(() { _showForm = !_showForm; }); },
             ),
           ],
         ),
@@ -92,9 +92,9 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
-        color: AAMColors.mint.withOpacity(0.3),
+        color: AAMColors.mint.withAlpha((0.3 * 255).round()),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AAMColors.accent.withOpacity(0.3)),
+        border: Border.all(color: AAMColors.accent.withAlpha((0.3 * 255).round())),
       ),
       child: Row(children: [
         const Icon(Icons.shield_outlined, size: 18, color: AAMColors.primary),
@@ -280,7 +280,7 @@ class _NuevoUsuarioFormState extends State<_NuevoUsuarioForm> {
           value: _rol,
           items: RolUsuario.values,
           labelOf: (r) => r.label,
-          onChanged: (v) => setState(() => _rol = v ?? _rol),
+          onChanged: (v) { setState(() { _rol = v ?? _rol; }); },
         ),
         const SizedBox(height: 14),
 
@@ -291,7 +291,7 @@ class _NuevoUsuarioFormState extends State<_NuevoUsuarioForm> {
             value: _turno,
             items: const ['Turno Mañana', 'Turno Tarde', 'Turno Vespertino'],
             labelOf: (s) => s,
-            onChanged: (v) => setState(() => _turno = v ?? _turno),
+            onChanged: (v) { setState(() { _turno = v ?? _turno; }); },
           ),
           const SizedBox(height: 14),
         ],
@@ -330,7 +330,7 @@ class _NuevoUsuarioFormState extends State<_NuevoUsuarioForm> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
-              color: _loading ? AAMColors.accent.withOpacity(0.6) : AAMColors.accent,
+              color: _loading ? AAMColors.accent.withAlpha((0.6 * 255).round()) : AAMColors.accent,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Center(child: _loading

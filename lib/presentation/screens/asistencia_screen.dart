@@ -3,9 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../domain/entities/curso.dart';
 import '../../domain/entities/registro_asistencia.dart';
 import '../../domain/usecases/get_asistencia_diaria.dart';
-import '../../infrastructure/datasources/mock_datasource.dart';
-import '../../infrastructure/repositories/asistencia_repository_impl.dart';
-import '../../infrastructure/repositories/curso_repository_impl.dart';
+import '../../infraestructure/datasources/mock_datasource.dart';
+import '../../infraestructure/repositories/asistencia_repository_impl.dart';
+import '../../infraestructure/repositories/curso_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
 
 class AsistenciaScreen extends StatefulWidget {
@@ -129,7 +129,7 @@ class _AsistenciaScreenState extends State<AsistenciaScreen> {
             underline: const SizedBox.shrink(),
             style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: AAMColors.primary),
             items: cursos.map((c) => DropdownMenuItem(value: c, child: Text(c.nombre))).toList(),
-            onChanged: (c) { if (c != null) _onCursoChanged(c); },
+            onChanged: (c) { if (c != null) { _onCursoChanged(c); } },
           ),
         const Spacer(),
         _navBtn(Icons.chevron_left,  () => _cambiarFecha(-1)),
@@ -221,9 +221,9 @@ class _MiniStat extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
+          color: color.withAlpha((0.08 * 255).round()),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.15)),
+          border: Border.all(color: color.withAlpha((0.15 * 255).round())),
         ),
         child: Row(children: [
           Text(value,

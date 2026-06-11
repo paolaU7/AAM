@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../domain/entities/curso.dart';
 import '../../domain/usecases/get_resumen_dashboard.dart';
-import '../../infrastructure/datasources/mock_datasource.dart';
-import '../../infrastructure/repositories/asistencia_repository_impl.dart';
-import '../../infrastructure/repositories/curso_repository_impl.dart';
+import '../../infraestructure/datasources/mock_datasource.dart';
+import '../../infraestructure/repositories/asistencia_repository_impl.dart';
+import '../../infraestructure/repositories/curso_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -252,11 +252,11 @@ class _DashboardContent extends StatelessWidget {
           const SizedBox(height: 16),
           ...alertas.map((a) => Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(children: [
+                child: Row(children: [
               Container(
                 width: 36, height: 36,
                 decoration: BoxDecoration(
-                  color: a.$2.withOpacity(0.12),
+                  color: a.$2.withAlpha((0.12 * 255).round()),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(a.$1, size: 18, color: a.$2),
@@ -305,11 +305,11 @@ class _DashboardContent extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Row(children: [
               Container(
-                width: 8, height: 8,
-                decoration: BoxDecoration(
-                  color: d.$2 ? AAMColors.success : AAMColors.highlight,
-                  shape: BoxShape.circle,
-                ),
+                    width: 8, height: 8,
+                    decoration: BoxDecoration(
+                      color: d.$2 ? AAMColors.success : AAMColors.highlight,
+                      shape: BoxShape.circle,
+                    ),
               ),
               const SizedBox(width: 10),
               Expanded(child: Text(d.$1,
