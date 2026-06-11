@@ -278,7 +278,7 @@ ${BOLD}${CYAN}╔═════════════════════
 ${BOLD}COMANDOS DISPONIBLES${RESET}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${BOLD}${GREEN}1. build${RESET} — Compila y verifica el proyecto completo
+${BOLD}${GREEN}1. ./aam.sh build${RESET} — Compila y verifica el proyecto completo
 
    Qué hace:
      • Backend  → instala dependencias, revisa errores de código
@@ -290,7 +290,7 @@ ${BOLD}${GREEN}1. build${RESET} — Compila y verifica el proyecto completo
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${BOLD}${GREEN}2. push-main${RESET} — Sube todos los cambios directo a main
+${BOLD}${GREEN}2. ./aam.sh push-main${RESET} — Sube todos los cambios directo a main
 
    Qué hace:
      • Agrega todos los archivos modificados
@@ -311,7 +311,7 @@ ${BOLD}${GREEN}2. push-main${RESET} — Sube todos los cambios directo a main
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${BOLD}${GREEN}3. push-branch${RESET} — Crea una rama nueva, commitea y pushea
+${BOLD}${GREEN}3. ./aam.sh push-branch${RESET} — Crea una rama nueva, commitea y pushea
 
    Qué hace:
      • Crea una rama nueva desde donde estás parado
@@ -344,7 +344,7 @@ ${BOLD}${GREEN}3. push-branch${RESET} — Crea una rama nueva, commitea y pushea
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${BOLD}${GREEN}4. help${RESET} — Muestra este mensaje
+${BOLD}${GREEN}4. ./aam.sh help${RESET} — Muestra este mensaje
 
    ${CYAN}./aam.sh help${RESET}
 
