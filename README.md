@@ -136,3 +136,12 @@ final ds = ApiDatasource(baseUrl: 'https://tu-api.com', token: authToken);
 2. Crear `ApiDatasource` que consuma el backend FastAPI
 3. Agregar `fromJson` / `toJson` a las entidades para parsear respuestas HTTP
 4. Agregar autenticación JWT y manejo de sesión
+
+
+# Darle permisos la primera vez
+chmod +x aam.sh
+
+./aam.sh build          # compila backend + frontend + firmware
+./aam.sh push-main      # add + commit + push a main
+./aam.sh push-branch    # crea rama, commitea y pushea
+./aam.sh help           # muestra todos los comandos
