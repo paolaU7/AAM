@@ -3,6 +3,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.infrastructure.models import Base
+from app.infrastructure.database import create_tables
+from app.api.attendance import router as attendance_router
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -19,6 +22,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(attendance_router)
+
+
+@app.on_event("startup")
+def on_startup():
+    # create tables if they don't exist (development convenience)
+    try:
+        create_tables(Base)
+    except Exception:
+        pass
 
 
 @app.get("/health")
