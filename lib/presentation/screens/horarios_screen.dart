@@ -14,9 +14,14 @@ class HorariosScreen extends StatefulWidget {
 
 class _HorariosScreenState extends State<HorariosScreen> {
   late final CursoRepositoryImpl _repo;
-  String _especialidad = 'Informática';
+  List<Curso> _cursos = [];
 
-  static const List<String> _especialidades = ['Informática', 'Electrónica', 'Construcciones'];
+  String _cicloLectivo = '2026';
+  int? _anioSel;
+  String? _divisionSel;
+  String? _grupoSel;
+
+  static const List<String> _ciclosLectivos = ['2024', '2025', '2026'];
   static const List<String> _dias   = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
   static const List<String> _franjas = [
     '07:45 – 08:35', '08:35 – 09:25', '09:25 – 10:15',
@@ -37,7 +42,47 @@ class _HorariosScreenState extends State<HorariosScreen> {
   @override
   void initState() {
     super.initState();
-    _repo   = CursoRepositoryImpl(MockDatasource());
+    _repo = CursoRepositoryImpl(MockDatasource());
+    _cargarCursos();
+  }
+
+  Future<void> _cargarCursos() async {
+    final cursos = await _repo.getCursos();
+    if (mounted) setState(() => _cursos = cursos);
+  }
+
+  List<int> get _anios {
+    final s = _cursos.map((c) => c.anio).toSet().toList();
+    s.sort();
+    return s;
+  }
+
+  List<String> get _divisiones {
+    if (_anioSel == null) return [];
+    final s = _cursos.where((c) => c.anio == _anioSel).map((c) => c.division).toSet().toList();
+    s.sort();
+    return s;
+  }
+
+  List<String> get _grupos {
+    if (_anioSel == null || _divisionSel == null) return [];
+    final s = _cursos
+        .where((c) => c.anio == _anioSel && c.division == _divisionSel)
+        .map((c) => c.grupoTaller)
+        .toSet()
+        .toList();
+    s.sort();
+    return s;
+  }
+
+  Curso? get _cursoResuelto {
+    if (_anioSel == null || _divisionSel == null || _grupoSel == null) return null;
+    try {
+      return _cursos.firstWhere((c) =>
+          c.anio == _anioSel && c.division == _divisionSel && c.grupoTaller == _grupoSel);
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -89,26 +134,63 @@ class _HorariosScreenState extends State<HorariosScreen> {
       child: Row(children: [
         Icon(Icons.schedule_outlined, size: 20, color: theme.text),
         const SizedBox(width: 12),
-        Text('Especialidad:', style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec)),
-        const SizedBox(width: 10),
-        DropdownButton<String>(
-          value: _especialidad,
-          underline: const SizedBox.shrink(),
-          style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: theme.text),
-          items: _especialidades.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-          onChanged: (v) => setState(() => _especialidad = v ?? _especialidad),
+        _FiltroDropdown<String>(
+          label: 'Ciclo lectivo',
+          value: _cicloLectivo,
+          options: _ciclosLectivos,
+          theme: theme,
+          onChanged: (v) => setState(() => _cicloLectivo = v ?? _cicloLectivo),
         ),
-        const SizedBox(width: 24),
-        Text('Ciclo lectivo 2026',
-          style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: theme.text)),
+        const SizedBox(width: 16),
+        _FiltroDropdown<int>(
+          label: 'Año',
+          value: _anioSel,
+          options: _anios,
+          theme: theme,
+          itemLabel: (a) => '$a°',
+          onChanged: (v) => setState(() {
+            _anioSel = v;
+            _divisionSel = null;
+            _grupoSel = null;
+          }),
+        ),
+        const SizedBox(width: 16),
+        _FiltroDropdown<String>(
+          label: 'División',
+          value: _divisionSel,
+          options: _divisiones,
+          theme: theme,
+          onChanged: _anioSel == null ? null : (v) => setState(() {
+            _divisionSel = v;
+            _grupoSel = null;
+          }),
+        ),
+        const SizedBox(width: 16),
+        _FiltroDropdown<String>(
+          label: 'Grupo de taller',
+          value: _grupoSel,
+          options: _grupos,
+          theme: theme,
+          onChanged: _divisionSel == null ? null : (v) => setState(() => _grupoSel = v),
+        ),
+        if (_cursoResuelto != null) ...
+          [
+            const SizedBox(width: 16),
+            Text(
+              '$_anioSel° $_divisionSel (${_cursoResuelto!.especialidad})',
+              style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: theme.text),
+            ),
+          ],
         const Spacer(),
-        _Leyenda(color: AAMColors.primary,       label: 'Teórica'),
+        _Leyenda(color: AAMColors.primary, label: 'Curricular'),
         const SizedBox(width: 12),
-        _Leyenda(color: AAMColors.accent,        label: 'Taller'),
+        _Leyenda(color: AAMColors.accent,  label: 'Taller'),
         const SizedBox(width: 12),
-        _Leyenda(color: AAMColors.success,       label: 'Lab.'),
+        _Leyenda(color: AAMColors.success, label: 'Almuerzo'),
         const SizedBox(width: 12),
-        _Leyenda(color: AAMColors.warning,       label: 'Ed. Física / Gral.'),
+        _Leyenda(color: AAMColors.mint,    label: 'Recreo'),
+        const SizedBox(width: 12),
+        _Leyenda(color: AAMColors.warning, label: 'Ed. Física'),
       ]),
     );
   }
@@ -269,6 +351,41 @@ class _Leyenda extends StatelessWidget {
         decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
       const SizedBox(width: 5),
       Text(label, style: GoogleFonts.dmSans(fontSize: 11, color: AAMColors.textSec)),
+    ]);
+  }
+}
+
+class _FiltroDropdown<T> extends StatelessWidget {
+  const _FiltroDropdown({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.theme,
+    required this.onChanged,
+    this.itemLabel,
+  });
+
+  final String label;
+  final T? value;
+  final List<T> options;
+  final AAMTheme theme;
+  final ValueChanged<T?>? onChanged;
+  final String Function(T)? itemLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final habilitado = onChanged != null && options.isNotEmpty;
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Text('$label:', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
+      const SizedBox(width: 8),
+      DropdownButton<T>(
+        value: value,
+        underline: const SizedBox.shrink(),
+        hint: Text('—', style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec)),
+        style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: theme.text),
+        items: options.map((o) => DropdownMenuItem(value: o, child: Text(itemLabel != null ? itemLabel!(o) : o.toString()))).toList(),
+        onChanged: habilitado ? onChanged : null,
+      ),
     ]);
   }
 }

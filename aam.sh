@@ -328,7 +328,7 @@ case "${1:-help}" in
         ;;
 
     *)
-        error "Comando desconocido: '${1:-}'"
+        error "Comando desconocido: '${1:-}'" 
         echo ""
         cmd_help
         exit 1

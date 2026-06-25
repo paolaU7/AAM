@@ -4,6 +4,7 @@ class Curso {
     required this.id,
     required this.anio,
     required this.division,
+    this.grupoTaller = '',
     required this.especialidad,
     required this.turno,
     required this.totalAlumnos,
@@ -14,7 +15,8 @@ class Curso {
 
   final String id;
   final int anio;           // 1–6
-  final String division;    // "1°", "2°", "3°"
+  final String division;    // "1°", "2°", "3°", "4°"...
+  final String grupoTaller; // "A", "B", "C"... (grupo de taller dentro del año/división)
   final String especialidad;
   final String turno;       // "mañana" | "tarde" | "vespertino"
   final int totalAlumnos;
@@ -22,7 +24,7 @@ class Curso {
   final String? horarioIngreso; // "08:00"
   final String? horarioEgreso;  // "12:20"
 
-  String get nombre => '$anio° $division° — $especialidad';
+  String get nombre => '$anio° $division° $grupoTaller — $especialidad';
   String get horario =>
       (horarioIngreso != null && horarioEgreso != null)
           ? '$horarioIngreso – $horarioEgreso'
@@ -32,6 +34,7 @@ class Curso {
     String? id,
     int? anio,
     String? division,
+    String? grupoTaller,
     String? especialidad,
     String? turno,
     int? totalAlumnos,
@@ -43,6 +46,7 @@ class Curso {
       id:             id             ?? this.id,
       anio:           anio           ?? this.anio,
       division:       division       ?? this.division,
+      grupoTaller:    grupoTaller    ?? this.grupoTaller,
       especialidad:   especialidad   ?? this.especialidad,
       turno:          turno          ?? this.turno,
       totalAlumnos:   totalAlumnos   ?? this.totalAlumnos,

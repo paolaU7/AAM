@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../domain/entities/alumno.dart';
+import '../../domain/entities/curso.dart';
 import '../../domain/usecases/get_alumnos.dart';
 import '../../infraestructure/datasources/mock_datasource.dart';
 import '../../infraestructure/repositories/alumno_repository_impl.dart';
+import '../../infraestructure/repositories/curso_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
 
 class AlumnosScreen extends StatefulWidget {
@@ -15,6 +17,7 @@ class AlumnosScreen extends StatefulWidget {
 
 class _AlumnosScreenState extends State<AlumnosScreen> {
   late final AlumnoRepositoryImpl _repo;
+  late final CursoRepositoryImpl _cursoRepo;
   late final GetAlumnos _getAlumnos;
   late Future<List<Alumno>> _future;
 
@@ -26,6 +29,7 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
   void initState() {
     super.initState();
     _repo = AlumnoRepositoryImpl(MockDatasource());
+    _cursoRepo = CursoRepositoryImpl(MockDatasource());
     _getAlumnos = GetAlumnos(_repo);
     _future = _getAlumnos();
   }
@@ -33,10 +37,12 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
   void _refresh() => setState(() => _future = _getAlumnos());
 
   Future<void> _abrirNuevoAlumno() async {
+    final cursos = await _cursoRepo.getCursos();
     final result = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
       builder: (_) => _AlumnoFormModal(
+        cursosDisponibles: cursos,
         onSave: (alumno) async {
           await _repo.crearAlumno(alumno.copyWith(id: 'tmp'));
         },
@@ -54,11 +60,13 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
   }
 
   Future<void> _abrirEdicion(Alumno alumno) async {
+    final cursos = await _cursoRepo.getCursos();
     final result = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
       builder: (_) => _AlumnoFormModal(
         alumno: alumno,
+        cursosDisponibles: cursos,
         onSave: (updated) async {
           await _repo.actualizarAlumno(updated);
         },
@@ -515,9 +523,10 @@ class _AlumnoDetalleModal extends StatelessWidget {
 }
 
 class _AlumnoFormModal extends StatefulWidget {
-  const _AlumnoFormModal({this.alumno, required this.onSave});
+  const _AlumnoFormModal({this.alumno, required this.cursosDisponibles, required this.onSave});
 
   final Alumno? alumno;
+  final List<Curso> cursosDisponibles;
   final Future<void> Function(Alumno alumno) onSave;
 
   @override
@@ -528,17 +537,50 @@ class _AlumnoFormModalState extends State<_AlumnoFormModal> {
   late final TextEditingController _nombreCtrl;
   late final TextEditingController _apellidoCtrl;
   late final TextEditingController _dniCtrl;
-  late final TextEditingController _especialidadCtrl;
-  String _curso = '4° 1°';
-  String _turno = 'Mañana';
+  int? _anioSel;
+  String? _divisionSel;
+  String? _grupoSel;
   bool _recursante = false;
   bool _loading = false;
   String? _error;
 
-  static const List<String> _cursos = [
-    '4° 1°', '4° 2°', '5° 1°', '5° 2°',
-  ];
-  static const List<String> _turnos = ['Mañana', 'Tarde', 'Vespertino'];
+  List<int> get _anios {
+    final s = widget.cursosDisponibles.map((c) => c.anio).toSet().toList();
+    s.sort();
+    return s;
+  }
+
+  List<String> get _divisiones {
+    if (_anioSel == null) return [];
+    final s = widget.cursosDisponibles
+        .where((c) => c.anio == _anioSel)
+        .map((c) => c.division)
+        .toSet()
+        .toList();
+    s.sort();
+    return s;
+  }
+
+  List<String> get _grupos {
+    if (_anioSel == null || _divisionSel == null) return [];
+    final s = widget.cursosDisponibles
+        .where((c) => c.anio == _anioSel && c.division == _divisionSel)
+        .map((c) => c.grupoTaller)
+        .toSet()
+        .toList();
+    s.sort();
+    return s;
+  }
+
+  Curso? get _cursoResuelto {
+    if (_anioSel == null || _divisionSel == null || _grupoSel == null) return null;
+    try {
+      return widget.cursosDisponibles.firstWhere((c) =>
+          c.anio == _anioSel && c.division == _divisionSel && c.grupoTaller == _grupoSel);
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   void initState() {
@@ -546,10 +588,15 @@ class _AlumnoFormModalState extends State<_AlumnoFormModal> {
     _nombreCtrl = TextEditingController(text: widget.alumno?.nombre ?? '');
     _apellidoCtrl = TextEditingController(text: widget.alumno?.apellido ?? '');
     _dniCtrl = TextEditingController(text: widget.alumno?.dni ?? '');
-    _especialidadCtrl = TextEditingController(text: widget.alumno?.especialidad ?? '');
-    _curso = widget.alumno?.curso ?? _curso;
-    _turno = widget.alumno?.turno ?? _turno;
     _recursante = widget.alumno?.recursante ?? false;
+    if (widget.alumno != null) {
+      final actual = widget.cursosDisponibles.where((c) => c.id == widget.alumno!.cursoId).toList();
+      if (actual.isNotEmpty) {
+        _anioSel = actual.first.anio;
+        _divisionSel = actual.first.division;
+        _grupoSel = actual.first.grupoTaller;
+      }
+    }
   }
 
   @override
@@ -557,13 +604,27 @@ class _AlumnoFormModalState extends State<_AlumnoFormModal> {
     _nombreCtrl.dispose();
     _apellidoCtrl.dispose();
     _dniCtrl.dispose();
-    _especialidadCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
-    if (_nombreCtrl.text.trim().isEmpty || _apellidoCtrl.text.trim().isEmpty || _dniCtrl.text.trim().isEmpty) {
-      setState(() => _error = 'Completa nombre, apellido y DNI.');
+    final dni = _dniCtrl.text.trim();
+    if (_nombreCtrl.text.trim().isEmpty ||
+        _apellidoCtrl.text.trim().isEmpty ||
+        dni.isEmpty ||
+        _anioSel == null ||
+        _divisionSel == null ||
+        _grupoSel == null) {
+      setState(() => _error = 'Completa todos los campos.');
+      return;
+    }
+    if (!RegExp(r'^\d{8}$').hasMatch(dni)) {
+      setState(() => _error = 'El DNI debe tener 8 dígitos.');
+      return;
+    }
+    final curso = _cursoResuelto;
+    if (curso == null) {
+      setState(() => _error = 'No se encontró el curso seleccionado.');
       return;
     }
     setState(() { _loading = true; _error = null; });
@@ -572,11 +633,11 @@ class _AlumnoFormModalState extends State<_AlumnoFormModal> {
         id: widget.alumno?.id ?? 'tmp',
         nombre: _nombreCtrl.text.trim(),
         apellido: _apellidoCtrl.text.trim(),
-        dni: _dniCtrl.text.trim(),
-        cursoId: _curso.toLowerCase().replaceAll(' ', '_'),
-        curso: _curso,
-        especialidad: _especialidadCtrl.text.trim(),
-        turno: _turno,
+        dni: dni,
+        cursoId: curso.id,
+        curso: curso.nombre,
+        especialidad: curso.especialidad,
+        turno: curso.turno,
         recursante: _recursante,
         porcentajeAsistencia: widget.alumno?.porcentajeAsistencia ?? 100.0,
       );
@@ -635,12 +696,52 @@ class _AlumnoFormModalState extends State<_AlumnoFormModal> {
                 _FieldGroup(label: 'DNI', child: _buildInput(_dniCtrl, 'Ej: 12345678')),
                 const SizedBox(height: 16),
                 Row(children: [
-                  Expanded(child: _DropdownGroup(label: 'Curso', value: _curso, options: _cursos, onChanged: (v) => setState(() => _curso = v))),
+                  Expanded(child: _DropdownGroup<int>(
+                    label: 'Año',
+                    value: _anioSel,
+                    options: _anios,
+                    hint: 'Año',
+                    itemLabel: (a) => '$a°',
+                    onChanged: (v) => setState(() {
+                      _anioSel = v;
+                      _divisionSel = null;
+                      _grupoSel = null;
+                    }),
+                  )),
                   const SizedBox(width: 16),
-                  Expanded(child: _DropdownGroup(label: 'Turno', value: _turno, options: _turnos, onChanged: (v) => setState(() => _turno = v))),
+                  Expanded(child: _DropdownGroup<String>(
+                    label: 'División',
+                    value: _divisionSel,
+                    options: _divisiones,
+                    hint: 'División',
+                    onChanged: _anioSel == null ? null : (v) => setState(() {
+                      _divisionSel = v;
+                      _grupoSel = null;
+                    }),
+                  )),
                 ]),
                 const SizedBox(height: 16),
-                _FieldGroup(label: 'Especialidad', child: _buildInput(_especialidadCtrl, 'Ej: Informática')),
+                _DropdownGroup<String>(
+                  label: 'Grupo de taller',
+                  value: _grupoSel,
+                  options: _grupos,
+                  hint: 'Grupo',
+                  onChanged: _divisionSel == null ? null : (v) => setState(() => _grupoSel = v),
+                ),
+                if (_cursoResuelto != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: theme.surfaceCol,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      'Especialidad: ${_cursoResuelto!.especialidad}   ·   Turno: ${_cursoResuelto!.turno}',
+                      style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Row(children: [
                   Switch(value: _recursante, onChanged: (v) => setState(() => _recursante = v)),
@@ -719,16 +820,19 @@ class _FieldGroup extends StatelessWidget {
   }
 }
 
-class _DropdownGroup extends StatelessWidget {
-  const _DropdownGroup({required this.label, required this.value, required this.options, required this.onChanged});
+class _DropdownGroup<T> extends StatelessWidget {
+  const _DropdownGroup({required this.label, required this.value, required this.options, required this.onChanged, this.hint, this.itemLabel});
   final String label;
-  final String value;
-  final List<String> options;
-  final ValueChanged<String> onChanged;
+  final T? value;
+  final List<T> options;
+  final ValueChanged<T?>? onChanged;
+  final String? hint;
+  final String Function(T)? itemLabel;
 
   @override
   Widget build(BuildContext context) {
     final theme = AAMTheme();
+    final habilitado = onChanged != null && options.isNotEmpty;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(label, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: theme.textSec)),
       const SizedBox(height: 6),
@@ -738,15 +842,14 @@ class _DropdownGroup extends StatelessWidget {
           border: Border.all(color: theme.borderCol),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: DropdownButton<String>(
+        child: DropdownButton<T>(
           value: value,
           underline: const SizedBox.shrink(),
           isExpanded: true,
+          hint: Text(hint ?? 'Seleccionar', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
           style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
-          items: options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
-          onChanged: (v) {
-            if (v != null) onChanged(v);
-          },
+          items: options.map((o) => DropdownMenuItem(value: o, child: Text(itemLabel != null ? itemLabel!(o) : o.toString()))).toList(),
+          onChanged: habilitado ? onChanged : null,
         ),
       ),
     ]);
