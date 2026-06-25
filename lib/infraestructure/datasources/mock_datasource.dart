@@ -10,7 +10,12 @@ class MockDatasource {
   List<Alumno> getAlumnos() => [];
 
   // ── Cursos ─────────────────────────────────────────────────────────────────
-  List<Curso> getCursos() => [];
+  List<Curso> getCursos() => [
+    const Curso(id: 'c1', anio: 2, division: '4°', grupoTaller: 'A', especialidad: 'Informática', turno: 'Mañana', totalAlumnos: 0),
+    const Curso(id: 'c2', anio: 2, division: '4°', grupoTaller: 'B', especialidad: 'Electrónica',  turno: 'Mañana', totalAlumnos: 0),
+    const Curso(id: 'c3', anio: 2, division: '5°', grupoTaller: 'A', especialidad: 'Mecánica',     turno: 'Tarde',  totalAlumnos: 0),
+    const Curso(id: 'c4', anio: 4, division: '1°', grupoTaller: 'A', especialidad: 'Informática',  turno: 'Vespertino', totalAlumnos: 0),
+  ];
 
   // ── Registros de asistencia ────────────────────────────────────────────────
   List<RegistroAsistencia> getRegistros(String cursoId, DateTime fecha) => [];
