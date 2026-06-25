@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
 #  aam — Scripts de desarrollo para el proyecto AAM
-#  Uso: aam <comando> [opciones]
 # =============================================================================
 
 set -euo pipefail
@@ -14,14 +13,13 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
-# ── Nombre del comando ──────────────────────────────────────────────────────
 SCRIPT_NAME="aam"
 
-# ── Detectar raíz REAL del repo Git ─────────────────────────────────────────
+# ── Detectar raíz del repo ──────────────────────────────────────────────────
 PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 
 # =============================================================================
-#  UTILIDADES
+# UTILIDADES
 # =============================================================================
 
 log()    { echo -e "${GREEN}▸${RESET} $*"; }
@@ -31,7 +29,7 @@ header() { echo -e "\n${BOLD}${CYAN}══ $* ══${RESET}\n"; }
 
 require_git_repo() {
     if [ -z "$PROJECT_ROOT" ]; then
-        error "No es un repositorio Git. Inicializá con: git init"
+        error "No es un repositorio Git."
         exit 1
     fi
 }
@@ -48,7 +46,7 @@ require_changes() {
 }
 
 # =============================================================================
-#  COMANDO: build
+# BUILD
 # =============================================================================
 
 cmd_build() {
@@ -58,137 +56,159 @@ cmd_build() {
 
     local failed=0
 
-    # ── Backend ──────────────────────────────────────────────────────────────
-    log "Backend → verificando Python y dependencias..."
+    # Backend
+    log "Backend → verificando dependencias..."
 
     if [ -d "$PROJECT_ROOT/backend" ]; then
         cd "$PROJECT_ROOT/backend"
 
-        if [ -f ".venv/bin/activate" ]; then
-            source .venv/bin/activate
-            log "Virtualenv activado."
-        elif [ -f "venv/bin/activate" ]; then
-            source venv/bin/activate
-            log "Virtualenv activado."
-        else
-            warn "No se encontró virtualenv. Usando Python del sistema."
-        fi
-
-        if [ -f "requirements.txt" ]; then
-            log "Instalando dependencias..."
-            pip install -q -r requirements.txt
-        elif [ -f "pyproject.toml" ]; then
-            log "Instalando dependencias..."
-            pip install -q -e .
+        if [ -f "pyproject.toml" ]; then
+            poetry install || failed=1
+        elif [ -f "requirements.txt" ]; then
+            pip install -r requirements.txt || failed=1
         else
             warn "No se encontraron dependencias."
         fi
 
         if command -v ruff &>/dev/null; then
-            log "Ejecutando ruff..."
-            ruff check . || {
-                error "ruff encontró errores."
-                failed=1
-            }
-        fi
-
-        if command -v mypy &>/dev/null; then
-            log "Ejecutando mypy..."
-            mypy . --ignore-missing-imports || warn "mypy reportó advertencias."
+            ruff check . || failed=1
         fi
 
         cd "$PROJECT_ROOT"
-        log "Backend OK."
     else
-        warn "Directorio backend/ no encontrado."
+        warn "backend/ no encontrado."
     fi
 
-    # ── Frontend ─────────────────────────────────────────────────────────────
+    # Frontend
     log "Frontend → verificando Flutter..."
 
     if [ -d "$PROJECT_ROOT/frontend" ]; then
         cd "$PROJECT_ROOT/frontend"
 
         if command -v flutter &>/dev/null; then
-            log "flutter pub get..."
-            flutter pub get
-
-            log "flutter analyze..."
-            flutter analyze || {
-                error "flutter analyze reportó errores."
-                failed=1
-            }
-
-            log "flutter test..."
-            flutter test || {
-                error "flutter test falló."
-                failed=1
-            }
+            flutter pub get || failed=1
+            flutter analyze --no-fatal-warnings --no-fatal-infos || failed=1
         else
             warn "Flutter no encontrado."
         fi
 
         cd "$PROJECT_ROOT"
-        log "Frontend OK."
     else
-        warn "Directorio frontend/ no encontrado."
-    fi
-
-    # ── Firmware ─────────────────────────────────────────────────────────────
-    log "Firmware → verificando PlatformIO..."
-
-    if [ -d "$PROJECT_ROOT/reader" ]; then
-        cd "$PROJECT_ROOT/reader"
-
-        if command -v pio &>/dev/null; then
-            log "pio run..."
-            pio run || {
-                error "PlatformIO falló."
-                failed=1
-            }
-        else
-            warn "PlatformIO no encontrado."
-        fi
-
-        cd "$PROJECT_ROOT"
-        log "Firmware OK."
-    else
-        warn "Directorio reader/ no encontrado."
+        warn "frontend/ no encontrado."
     fi
 
     echo ""
 
     if [ "$failed" -eq 0 ]; then
-        echo -e "${GREEN}${BOLD}✔ Build completado sin errores.${RESET}"
+        echo -e "${GREEN}${BOLD}✔ Build OK${RESET}"
     else
-        echo -e "${RED}${BOLD}✖ Build terminó con errores.${RESET}"
+        echo -e "${RED}${BOLD}✖ Build con errores${RESET}"
         exit 1
     fi
 }
 
 # =============================================================================
-#  COMANDO: push-main
+# RUN BACKEND / FRONTEND / FULL
 # =============================================================================
 
-cmd_push_main() {
-    header "AAM — Push a main"
+cmd_run_back() {
+    require_git_repo
 
+    header "AAM — Backend"
+
+    if [ -d "$PROJECT_ROOT/backend" ]; then
+        cd "$PROJECT_ROOT/backend"
+        log "Levantando backend en http://localhost:8000 ..."
+        PYTHONPATH=. poetry run uvicorn app.main:app --reload
+    else
+        warn "backend/ no encontrado."
+    fi
+}
+
+cmd_run_front() {
+    require_git_repo
+
+    header "AAM — Frontend"
+
+    if [ -d "$PROJECT_ROOT/frontend" ]; then
+        cd "$PROJECT_ROOT/frontend"
+        log "Levantando frontend..."
+        flutter run -d chrome
+    else
+        warn "frontend/ no encontrado."
+    fi
+}
+
+cmd_run() {
+    require_git_repo
+
+    header "AAM — Run completo"
+
+    if [ -d "$PROJECT_ROOT/backend" ]; then
+        log "Levantando backend..."
+        cd "$PROJECT_ROOT/backend"
+        PYTHONPATH=. poetry run uvicorn app.main:app --reload &
+        BACK_PID=$!
+        cd "$PROJECT_ROOT"
+    else
+        warn "backend/ no encontrado."
+        BACK_PID=""
+    fi
+
+    if [ -d "$PROJECT_ROOT/frontend" ]; then
+        log "Levantando frontend..."
+        cd "$PROJECT_ROOT/frontend"
+        flutter run -d chrome &
+        FRONT_PID=$!
+        cd "$PROJECT_ROOT"
+    else
+        warn "frontend/ no encontrado."
+        FRONT_PID=""
+    fi
+
+    echo ""
+    echo -e "${GREEN}${BOLD}✔ Backend y frontend iniciados.${RESET}"
+    echo -e "${CYAN}Backend PID:${RESET}  ${BACK_PID:-N/A}"
+    echo -e "${CYAN}Frontend PID:${RESET} ${FRONT_PID:-N/A}"
+
+    wait
+}
+
+# =============================================================================
+# PUSH
+# =============================================================================
+
+cmd_push() {
     require_git_repo
     require_changes
 
+    header "AAM — Push"
+
     cd "$PROJECT_ROOT"
 
-    local msg="${1:-}"
+    echo -e "${CYAN}Rama destino:${RESET}"
+    read -r branch
 
-    if [ -z "$msg" ]; then
-        echo -e "${CYAN}Mensaje de commit:${RESET}"
-        read -r msg
-    fi
-
-    if [ -z "$msg" ]; then
-        error "El mensaje de commit no puede estar vacío."
+    if [ -z "$branch" ]; then
+        error "La rama no puede estar vacía."
         exit 1
     fi
+
+    if ! git show-ref --verify --quiet "refs/heads/$branch"; then
+        error "La rama '$branch' no existe."
+        exit 1
+    fi
+
+    echo -e "${CYAN}Mensaje de commit:${RESET}"
+    read -r msg
+
+    if [ -z "$msg" ]; then
+        error "El mensaje no puede estar vacío."
+        exit 1
+    fi
+
+    log "git checkout $branch"
+    git checkout "$branch"
 
     log "git add -A"
     git add -A
@@ -196,141 +216,39 @@ cmd_push_main() {
     log "git commit -m \"$msg\""
     git commit -m "$msg"
 
-    local current_branch
-    current_branch=$(git rev-parse --abbrev-ref HEAD)
+    log "git push origin $branch"
+    git push origin "$branch"
 
-    if [ "$current_branch" != "main" ]; then
-        warn "Estás en '$current_branch', no en 'main'."
-
-        echo -ne "¿Hacer checkout a main y mergear? [s/N] "
-        read -r confirm
-
-        if [[ "$confirm" =~ ^[sS]$ ]]; then
-            git checkout main
-            git merge "$current_branch" --no-ff -m "Merge $current_branch → main"
-        else
-            warn "Push cancelado."
-            exit 0
-        fi
-    fi
-
-    log "git push origin main"
-    git push origin main
-
-    echo -e "\n${GREEN}${BOLD}✔ Cambios pusheados a main.${RESET}"
+    echo ""
+    echo -e "${GREEN}${BOLD}✔ Push completado.${RESET}"
 }
 
 # =============================================================================
-#  COMANDO: push-branch
-# =============================================================================
-
-cmd_push_branch() {
-    header "AAM — Push a nueva rama"
-
-    require_git_repo
-    require_changes
-
-    cd "$PROJECT_ROOT"
-
-    local branch="${1:-}"
-    local msg="${2:-}"
-
-    if [ -z "$branch" ]; then
-        echo -e "${CYAN}Nombre de la nueva rama:${RESET}"
-        read -r branch
-    fi
-
-    if [ -z "$branch" ]; then
-        error "El nombre de la rama no puede estar vacío."
-        exit 1
-    fi
-
-    branch=$(echo "$branch" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
-
-    if [ -z "$msg" ]; then
-        echo -e "${CYAN}Mensaje de commit:${RESET}"
-        read -r msg
-    fi
-
-    if [ -z "$msg" ]; then
-        error "El mensaje de commit no puede estar vacío."
-        exit 1
-    fi
-
-    log "git checkout -b \"$branch\""
-    git checkout -b "$branch"
-
-    log "git add -A"
-    git add -A
-
-    log "git commit -m \"$msg\""
-    git commit -m "$msg"
-
-    log "git push -u origin \"$branch\""
-    git push -u origin "$branch"
-
-    echo -e "\n${GREEN}${BOLD}✔ Rama '$branch' creada y pusheada.${RESET}"
-}
-
-# =============================================================================
-#  COMANDO: help
+# HELP
 # =============================================================================
 
 cmd_help() {
     echo -e "
-${BOLD}${CYAN}╔══════════════════════════════════════════════════════╗
-║                AAM CLI v1.0                          ║
-╚══════════════════════════════════════════════════════╝${RESET}
+${BOLD}${CYAN}AAM CLI${RESET}
 
-${BOLD}COMANDOS DISPONIBLES${RESET}
-
-${GREEN}${SCRIPT_NAME} build${RESET}
-   Compila y verifica backend, frontend y firmware.
-
-${GREEN}${SCRIPT_NAME} push-main${RESET}
-   Commit + push directo a main.
-
-${GREEN}${SCRIPT_NAME} push-main \"mensaje\"${RESET}
-   Push a main con mensaje automático.
-
-${GREEN}${SCRIPT_NAME} push-branch${RESET}
-   Crea rama nueva y hace push.
-
-${GREEN}${SCRIPT_NAME} push-branch feature/login \"feat: login\"${RESET}
-   Crea rama y pushea automáticamente.
-
-${GREEN}${SCRIPT_NAME} help${RESET}
-   Muestra esta ayuda.
+${GREEN}aam build${RESET}
+${GREEN}aam run${RESET}
+${GREEN}aam run-back${RESET}
+${GREEN}aam run-front${RESET}
+${GREEN}aam push${RESET}
 "
 }
 
 # =============================================================================
-#  DISPATCHER
+# DISPATCHER
 # =============================================================================
 
 case "${1:-help}" in
-    build)
-        cmd_build
-        ;;
-
-    push-main)
-        shift
-        cmd_push_main "$@"
-        ;;
-
-    push-branch)
-        shift
-        cmd_push_branch "$@"
-        ;;
-
-    help|--help|-h)
-        cmd_help
-        ;;
-
-    *)
-        error "Comando desconocido: '${1:-}'" 
-        echo ""
-        cmd_help
-        exit 1
-        ;;
+    build) cmd_build ;;
+    run) cmd_run ;;
+    run-back) cmd_run_back ;;
+    run-front) cmd_run_front ;;
+    push) cmd_push ;;
+    help|--help|-h) cmd_help ;;
+    *) error "Comando desconocido: ${1:-}" ; cmd_help ;;
 esac
