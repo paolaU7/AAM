@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../domain/entities/curso.dart';
-import '../../infraestructure/datasources/mock_datasource.dart';
+import '../../infraestructure/datasources/api_datasource.dart';
 import '../../infraestructure/repositories/curso_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
 
@@ -42,7 +42,7 @@ class _HorariosScreenState extends State<HorariosScreen> {
   @override
   void initState() {
     super.initState();
-    _repo = CursoRepositoryImpl(MockDatasource());
+    _repo = CursoRepositoryImpl(ApiDatasource());
     _cargarCursos();
   }
 

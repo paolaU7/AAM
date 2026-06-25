@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../domain/entities/alumno.dart';
 import '../../domain/entities/curso.dart';
 import '../../domain/usecases/get_alumnos.dart';
-import '../../infraestructure/datasources/mock_datasource.dart';
+import '../../infraestructure/datasources/api_datasource.dart';
 import '../../infraestructure/repositories/alumno_repository_impl.dart';
 import '../../infraestructure/repositories/curso_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
@@ -28,8 +28,9 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
   @override
   void initState() {
     super.initState();
-    _repo = AlumnoRepositoryImpl(MockDatasource());
-    _cursoRepo = CursoRepositoryImpl(MockDatasource());
+    final api = ApiDatasource();
+    _repo = AlumnoRepositoryImpl(api);
+    _cursoRepo = CursoRepositoryImpl(api);
     _getAlumnos = GetAlumnos(_repo);
     _future = _getAlumnos();
   }

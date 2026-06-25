@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../domain/entities/curso.dart';
 import '../../domain/usecases/get_resumen_dashboard.dart';
-import '../../infraestructure/datasources/mock_datasource.dart';
+import '../../infraestructure/datasources/api_datasource.dart';
 import '../../infraestructure/repositories/asistencia_repository_impl.dart';
 import '../../infraestructure/repositories/curso_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
@@ -22,7 +22,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    final ds = MockDatasource();
+    final ds = ApiDatasource();
     _getResumen = GetResumenDashboard(
       asistenciaRepository: AsistenciaRepositoryImpl(ds),
       cursoRepository:      CursoRepositoryImpl(ds),

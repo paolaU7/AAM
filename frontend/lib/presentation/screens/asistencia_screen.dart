@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../domain/entities/curso.dart';
 import '../../domain/entities/registro_asistencia.dart';
 import '../../domain/usecases/get_asistencia_diaria.dart';
-import '../../infraestructure/datasources/mock_datasource.dart';
+import '../../infraestructure/datasources/api_datasource.dart';
 import '../../infraestructure/repositories/asistencia_repository_impl.dart';
 import '../../infraestructure/repositories/curso_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
@@ -28,7 +28,7 @@ class _AsistenciaScreenState extends State<AsistenciaScreen> {
   @override
   void initState() {
     super.initState();
-    final ds = MockDatasource();
+    final ds = ApiDatasource();
     _asistenciaRepo = AsistenciaRepositoryImpl(ds);
     _getAsistencia  = GetAsistenciaDiaria(_asistenciaRepo);
     _cursoRepo      = CursoRepositoryImpl(ds);

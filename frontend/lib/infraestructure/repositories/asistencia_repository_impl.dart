@@ -2,10 +2,12 @@ import '../../domain/entities/curso.dart';
 import '../../domain/entities/registro_asistencia.dart';
 import '../../domain/repositories/asistencia_repository.dart';
 import '../datasources/mock_datasource.dart';
+import '../datasources/api_datasource.dart';
 
 class AsistenciaRepositoryImpl implements AsistenciaRepository {
   AsistenciaRepositoryImpl(this._datasource);
-  final MockDatasource _datasource;
+  final ApiDatasource _datasource;
+  final MockDatasource _mock = MockDatasource();
 
   @override
   Future<List<RegistroAsistencia>> getRegistrosPorCursoYFecha(
@@ -13,13 +15,13 @@ class AsistenciaRepositoryImpl implements AsistenciaRepository {
     DateTime fecha,
   ) async {
     await Future.delayed(const Duration(milliseconds: 300));
-    return _datasource.getRegistros(cursoId, fecha);
+    return _mock.getRegistros(cursoId, fecha);
   }
 
   @override
   Future<ResumenAsistencia> getResumenDiario(DateTime fecha) async {
     await Future.delayed(const Duration(milliseconds: 200));
-    return _datasource.getResumenGlobal(fecha);
+    return _mock.getResumenGlobal(fecha);
   }
 
   @override
@@ -28,7 +30,7 @@ class AsistenciaRepositoryImpl implements AsistenciaRepository {
     DateTime fecha,
   ) async {
     await Future.delayed(const Duration(milliseconds: 150));
-    return _datasource.getResumenTurno(turno, fecha);
+    return _mock.getResumenTurno(turno, fecha);
   }
 
   @override
