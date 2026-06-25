@@ -19,12 +19,13 @@ class _AppShellState extends State<AppShell> {
   int _selectedIndex = 0;
 
   static const List<_NavItem> _navItems = [
-    _NavItem(icon: Icons.dashboard_outlined,       label: 'Dashboard',  index: 0),
-    _NavItem(icon: Icons.people_outline,           label: 'Alumnos',    index: 1),
-    _NavItem(icon: Icons.fact_check_outlined,      label: 'Asistencia', index: 2),
-    _NavItem(icon: Icons.schedule_outlined,        label: 'Horarios',   index: 3),
-    _NavItem(icon: Icons.manage_accounts_outlined, label: 'Usuarios',   index: 4),
-    _NavItem(icon: Icons.bar_chart_outlined,       label: 'Reportes',   index: 5),
+    _NavItem(icon: Icons.dashboard_outlined,       label: 'Dashboard',     index: 0),
+    _NavItem(icon: Icons.people_outline,           label: 'Alumnos',       index: 1),
+    _NavItem(icon: Icons.fact_check_outlined,      label: 'Asistencia',    index: 2),
+    _NavItem(icon: Icons.schedule_outlined,        label: 'Horarios',      index: 3),
+    _NavItem(icon: Icons.manage_accounts_outlined, label: 'Usuarios',      index: 4),
+    _NavItem(icon: Icons.bar_chart_outlined,       label: 'Reportes',      index: 5),
+    _NavItem(icon: Icons.settings_outlined,        label: 'Configuración', index: 6),
   ];
 
   Widget get _currentScreen => switch (_selectedIndex) {
@@ -34,23 +35,31 @@ class _AppShellState extends State<AppShell> {
     3 => const HorariosScreen(),
     4 => const UsuariosScreen(),
     5 => const ReportesScreen(),
+    6 => const _ConfiguracionPlaceholder(),
     _ => const DashboardScreen(),
   };
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AAMColors.surface,
-      body: Row(
-        children: [
-          _Sidebar(
-            navItems:      _navItems,
-            selectedIndex: _selectedIndex,
-            onItemTap:     (i) => setState(() => _selectedIndex = i),
+    return AnimatedBuilder(
+      animation: AAMTheme(),
+      builder: (context, _) {
+        final theme = AAMTheme();
+        return Scaffold(
+          backgroundColor: theme.bg,
+          body: Row(
+            children: [
+              _Sidebar(
+                navItems:      _navItems,
+                selectedIndex: _selectedIndex,
+                onItemTap:     (i) => setState(() => _selectedIndex = i),
+                theme:         theme,
+              ),
+              Expanded(child: _currentScreen),
+            ],
           ),
-          Expanded(child: _currentScreen),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -61,23 +70,25 @@ class _Sidebar extends StatelessWidget {
     required this.navItems,
     required this.selectedIndex,
     required this.onItemTap,
+    required this.theme,
   });
   final List<_NavItem> navItems;
   final int selectedIndex;
   final void Function(int) onItemTap;
+  final AAMTheme theme;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: 220,
-      color: AAMColors.white,
+      color: theme.sidebar,
       child: Column(
         children: [
           // Logo
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: Color(0x10000000), width: 1)),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: theme.borderCol, width: 1)),
             ),
             child: Row(
               children: [
@@ -109,6 +120,7 @@ class _Sidebar extends StatelessWidget {
                   item:     item,
                   selected: item.index == selectedIndex,
                   onTap:    () => onItemTap(item.index),
+                  theme:    theme,
                 )).toList(),
               ),
             ),
@@ -117,8 +129,8 @@ class _Sidebar extends StatelessWidget {
           // Footer usuario
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: Color(0x10000000), width: 1)),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: theme.borderCol, width: 1)),
             ),
             child: Row(
               children: [
@@ -161,10 +173,11 @@ class _Sidebar extends StatelessWidget {
 }
 
 class _SidebarTile extends StatefulWidget {
-  const _SidebarTile({required this.item, required this.selected, required this.onTap});
+  const _SidebarTile({required this.item, required this.selected, required this.onTap, required this.theme});
   final _NavItem item;
   final bool selected;
   final VoidCallback onTap;
+  final AAMTheme theme;
 
   @override
   State<_SidebarTile> createState() => _SidebarTileState();
@@ -188,7 +201,7 @@ class _SidebarTileState extends State<_SidebarTile> {
           decoration: BoxDecoration(
             color: widget.selected
                 ? AAMColors.primary
-                : (_hovered ? AAMColors.surface : Colors.transparent),
+                : (_hovered ? widget.theme.surfaceCol : Colors.transparent),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Row(
@@ -197,7 +210,7 @@ class _SidebarTileState extends State<_SidebarTile> {
                 widget.item.icon,
                 size: 18,
                 color: widget.selected ? AAMColors.white
-                    : (_hovered ? AAMColors.primary : AAMColors.textSec),
+                    : (_hovered ? AAMColors.primary : widget.theme.textSec),
               ),
               const SizedBox(width: 10),
               Text(
@@ -206,7 +219,7 @@ class _SidebarTileState extends State<_SidebarTile> {
                   fontSize: 13,
                   fontWeight: widget.selected ? FontWeight.w600 : FontWeight.w500,
                   color: widget.selected ? AAMColors.white
-                      : (_hovered ? AAMColors.primary : AAMColors.textSec),
+                      : (_hovered ? AAMColors.primary : widget.theme.textSec),
                 ),
               ),
             ],
@@ -222,4 +235,18 @@ class _NavItem {
   final IconData icon;
   final String label;
   final int index;
+}
+
+class _ConfiguracionPlaceholder extends StatelessWidget {
+  const _ConfiguracionPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(children: [
+      const AAMTopbar(title: 'Configuración'),
+      Expanded(child: Center(child: Text('Próximamente',
+        style: GoogleFonts.dmSans(fontSize: 14, color: AAMColors.textSec),
+      ))),
+    ]);
+  }
 }

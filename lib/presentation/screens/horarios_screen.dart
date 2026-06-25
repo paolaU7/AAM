@@ -28,7 +28,7 @@ class _HorariosScreenState extends State<HorariosScreen> {
   static const Map<int, Map<int, _HCelda>> _grilla = {
     0: { 0: _HCelda('Matemática',  '4° 2°', AAMColors.primary), 2: _HCelda('Física',      '3° 1°', AAMColors.accent),   4: _HCelda('Matemática',  '5° 3°', AAMColors.primary) },
     1: { 1: _HCelda('Programación','4° 2°', AAMColors.primary), 3: _HCelda('Electrónica', '3° 1°', AAMColors.accent) },
-    2: { 0: _HCelda('Inglés',      '4° 2°', Color(0xFF7C3AED)), 2: _HCelda('Química',     '5° 3°', Color(0xFF7C3AED)), 4: _HCelda('Ed. Física', '3° 1°', AAMColors.warning) },
+    2: { 0: _HCelda('Inglés',      '4° 2°', AAMColors.violet), 2: _HCelda('Química',     '5° 3°', AAMColors.violet), 4: _HCelda('Ed. Física', '3° 1°', AAMColors.warning) },
     4: { 0: _HCelda('Proyecto',    '6° 1°', AAMColors.accent),  1: _HCelda('Redes',       '4° 2°', AAMColors.primary), 3: _HCelda('Sistemas',   '6° 1°', AAMColors.accent) },
     5: { 2: _HCelda('Taller',      '4° 2°', AAMColors.success), 4: _HCelda('Taller',      '3° 1°', AAMColors.success) },
     6: { 0: _HCelda('Historia',    '5° 3°', AAMColors.warning),  3: _HCelda('Geografía',   '4° 2°', AAMColors.warning) },
@@ -42,6 +42,16 @@ class _HorariosScreenState extends State<HorariosScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: AAMTheme(),
+      builder: (context, _) {
+        final theme = AAMTheme();
+        return _buildScreen(theme);
+      },
+    );
+  }
+
+  Widget _buildScreen(AAMTheme theme) {
     return Column(
       children: [
         AAMTopbar(
@@ -56,11 +66,11 @@ class _HorariosScreenState extends State<HorariosScreen> {
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Column(children: [
-              _buildControles(),
+              _buildControles(theme),
               const SizedBox(height: 16),
-              _buildHint(),
+              _buildHint(theme),
               const SizedBox(height: 20),
-              Expanded(child: _buildGrilla()),
+              Expanded(child: _buildGrilla(theme)),
             ]),
           ),
         ),
@@ -68,29 +78,29 @@ class _HorariosScreenState extends State<HorariosScreen> {
     );
   }
 
-  Widget _buildControles() {
+  Widget _buildControles(AAMTheme theme) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
-        color: AAMColors.white,
-        border: Border.all(color: AAMColors.border),
+        color: theme.card,
+        border: Border.all(color: theme.borderCol),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(children: [
-        const Icon(Icons.schedule_outlined, size: 20, color: AAMColors.primary),
+        Icon(Icons.schedule_outlined, size: 20, color: theme.text),
         const SizedBox(width: 12),
-        Text('Especialidad:', style: GoogleFonts.dmSans(fontSize: 14, color: AAMColors.textSec)),
+        Text('Especialidad:', style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec)),
         const SizedBox(width: 10),
         DropdownButton<String>(
           value: _especialidad,
           underline: const SizedBox.shrink(),
-          style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: AAMColors.primary),
+          style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: theme.text),
           items: _especialidades.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
           onChanged: (v) => setState(() => _especialidad = v ?? _especialidad),
         ),
         const SizedBox(width: 24),
         Text('Ciclo lectivo 2026',
-          style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: AAMColors.primary)),
+          style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: theme.text)),
         const Spacer(),
         _Leyenda(color: AAMColors.primary,       label: 'Teórica'),
         const SizedBox(width: 12),
@@ -103,7 +113,7 @@ class _HorariosScreenState extends State<HorariosScreen> {
     );
   }
 
-  Widget _buildHint() {
+  Widget _buildHint(AAMTheme theme) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
@@ -124,15 +134,15 @@ class _HorariosScreenState extends State<HorariosScreen> {
     );
   }
 
-  Widget _buildGrilla() {
+  Widget _buildGrilla(AAMTheme theme) {
     const double colW = 140;
     const double rowH = 56;
     const double hdrH = 44;
 
     return Container(
       decoration: BoxDecoration(
-        color: AAMColors.white,
-        border: Border.all(color: AAMColors.border),
+        color: theme.card,
+        border: Border.all(color: theme.borderCol),
         borderRadius: BorderRadius.circular(16),
       ),
       child: ClipRRect(
@@ -145,17 +155,17 @@ class _HorariosScreenState extends State<HorariosScreen> {
               // Header
               Container(
                 height: hdrH,
-                color: AAMColors.surface,
+                color: theme.surfaceCol,
                 child: Row(children: [
                   const SizedBox(width: 80),
                   ..._dias.map((d) => SizedBox(
                     width: colW,
                     child: Center(child: Text(d,
-                      style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: AAMColors.primary))),
+                      style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: theme.text))),
                   )),
                 ]),
               ),
-              const Divider(height: 1, color: AAMColors.border),
+              Divider(height: 1, color: theme.borderCol),
               // Filas
               Expanded(child: ListView.builder(
                 itemCount: _franjas.length,
@@ -164,14 +174,14 @@ class _HorariosScreenState extends State<HorariosScreen> {
                   return Container(
                     height: esRecreo ? 32 : rowH,
                     decoration: BoxDecoration(
-                      color: esRecreo ? AAMColors.surface : AAMColors.white,
-                      border: const Border(bottom: BorderSide(color: AAMColors.border, width: 1)),
+                      color: esRecreo ? theme.surfaceCol : theme.card,
+                      border: Border(bottom: BorderSide(color: theme.borderCol, width: 1)),
                     ),
                     child: Row(children: [
                       SizedBox(width: 80, child: Center(child: Text(_franjas[fi],
                         style: GoogleFonts.dmSans(
                           fontSize: esRecreo ? 10 : 11,
-                          color: esRecreo ? AAMColors.accent : AAMColors.textSec,
+                          color: esRecreo ? AAMColors.accent : theme.textSec,
                           fontWeight: esRecreo ? FontWeight.w600 : FontWeight.w400,
                         ),
                         textAlign: TextAlign.center))),
@@ -184,9 +194,9 @@ class _HorariosScreenState extends State<HorariosScreen> {
                                   child: Center(child: Text('— Recreo —',
                                     style: GoogleFonts.dmSans(fontSize: 10, color: AAMColors.accent, fontWeight: FontWeight.w600))))
                               : celda != null
-                                  ? _CeldaHorario(celda: celda)
+                                  ? _CeldaHorario(celda: celda, theme: theme)
                                   : Container(margin: const EdgeInsets.all(4),
-                                      decoration: BoxDecoration(color: AAMColors.surface, borderRadius: BorderRadius.circular(8))),
+                                      decoration: BoxDecoration(color: theme.surfaceCol, borderRadius: BorderRadius.circular(8))),
                         );
                       }),
                     ]),
@@ -209,8 +219,9 @@ class _HCelda {
 }
 
 class _CeldaHorario extends StatefulWidget {
-  const _CeldaHorario({required this.celda});
+  const _CeldaHorario({required this.celda, required this.theme});
   final _HCelda celda;
+  final AAMTheme theme;
 
   @override
   State<_CeldaHorario> createState() => _CeldaHorarioState();
@@ -239,7 +250,7 @@ class _CeldaHorarioState extends State<_CeldaHorario> {
             overflow: TextOverflow.ellipsis),
           Text(widget.celda.curso,
             style: GoogleFonts.dmSans(fontSize: 10,
-              color: _hovered ? AAMColors.white.withAlpha((0.8 * 255).round()) : AAMColors.textSec)),
+              color: _hovered ? AAMColors.white.withAlpha((0.8 * 255).round()) : widget.theme.textSec)),
         ]),
       ),
     );

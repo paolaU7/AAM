@@ -17,7 +17,6 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
   late final UsuarioRepositoryImpl _repo;
   late final CrearUsuario _crearUsuario;
   late Future<List<Usuario>> _future;
-  bool _showForm = false;
 
   @override
   void initState() {
@@ -29,8 +28,36 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
 
   void _refresh() => setState(() => _future = _repo.getUsuarios());
 
+  void _abrirModal() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
+      builder: (_) => _NuevoUsuarioModal(
+        onCreate: (nombre, apellido, rol, turno) async {
+          await _crearUsuario(
+            nombre:   nombre,
+            apellido: apellido,
+            rol:      rol,
+            turno:    turno,
+          );
+          _refresh();
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: AAMTheme(),
+      builder: (context, _) {
+        final theme = AAMTheme();
+        return _buildScreen(theme);
+      },
+    );
+  }
+
+  Widget _buildScreen(AAMTheme theme) {
     return Column(
       children: [
         AAMTopbar(
@@ -39,7 +66,7 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
             AAMButton(
               label: 'Nuevo usuario',
               icon: Icons.person_add_outlined,
-              onPressed: () { setState(() { _showForm = !_showForm; }); },
+              onPressed: _abrirModal,
             ),
           ],
         ),
@@ -54,31 +81,10 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
 
               return Padding(
                 padding: const EdgeInsets.all(32),
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Expanded(flex: 3, child: Column(children: [
-                    _buildBanner(),
-                    const SizedBox(height: 20),
-                    Expanded(child: _buildTabla(snap.data!)),
-                  ])),
-                  if (_showForm) ...[
-                    const SizedBox(width: 24),
-                    SizedBox(
-                      width: 320,
-                      child: _NuevoUsuarioForm(
-                        onClose: () => setState(() => _showForm = false),
-                        onCreate: (nombre, apellido, rol, turno) async {
-                          await _crearUsuario(
-                            nombre:   nombre,
-                            apellido: apellido,
-                            rol:      rol,
-                            turno:    turno,
-                          );
-                          setState(() => _showForm = false);
-                          _refresh();
-                        },
-                      ),
-                    ),
-                  ],
+                child: Column(children: [
+                  _buildBanner(theme),
+                  const SizedBox(height: 20),
+                  Expanded(child: _buildTabla(snap.data!, theme)),
                 ]),
               );
             },
@@ -88,7 +94,7 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
     );
   }
 
-  Widget _buildBanner() {
+  Widget _buildBanner(AAMTheme theme) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
@@ -108,33 +114,46 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
     );
   }
 
-  Widget _buildTabla(List<Usuario> usuarios) {
+  Widget _buildTabla(List<Usuario> usuarios, AAMTheme theme) {
     return Container(
       decoration: BoxDecoration(
-        color: AAMColors.white,
-        border: Border.all(color: AAMColors.border),
+        color: theme.card,
+        border: Border.all(color: theme.borderCol),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(children: [
         const AAMTableHeader(columns: [
-          ('Nombre',    2),
-          ('Usuario',   2),
-          ('Rol',       2),
-          ('Turno',     2),
-          ('Estado',    2),
-          ('',          1),
+          ('Nombre',  2),
+          ('Usuario', 2),
+          ('Rol',     2),
+          ('Turno',   2),
+          ('Estado',  2),
+          ('',        1),
         ]),
         Expanded(
-          child: ListView.builder(
-            itemCount: usuarios.length,
-            itemBuilder: (ctx, i) => _UsuarioRow(
-              usuario: usuarios[i],
-              onToggle: () async {
-                await _repo.toggleActivo(usuarios[i].id);
-                _refresh();
-              },
-            ),
-          ),
+          child: usuarios.isEmpty
+              ? Center(child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.people_outline, size: 40, color: theme.borderCol),
+                    const SizedBox(height: 12),
+                    Text('No hay usuarios cargados',
+                      style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec)),
+                    const SizedBox(height: 8),
+                    AAMButton(label: 'Crear primer usuario', onPressed: _abrirModal),
+                  ],
+                ))
+              : ListView.builder(
+                  itemCount: usuarios.length,
+                  itemBuilder: (ctx, i) => _UsuarioRow(
+                    usuario: usuarios[i],
+                    theme: theme,
+                    onToggle: () async {
+                      await _repo.toggleActivo(usuarios[i].id);
+                      _refresh();
+                    },
+                  ),
+                ),
         ),
       ]),
     );
@@ -143,8 +162,9 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
 
 // ─── Fila de usuario ──────────────────────────────────────────────────────────
 class _UsuarioRow extends StatefulWidget {
-  const _UsuarioRow({required this.usuario, required this.onToggle});
+  const _UsuarioRow({required this.usuario, required this.theme, required this.onToggle});
   final Usuario usuario;
+  final AAMTheme theme;
   final VoidCallback onToggle;
 
   @override
@@ -166,11 +186,10 @@ class _UsuarioRowState extends State<_UsuarioRow> {
         duration: const Duration(milliseconds: 140),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         decoration: BoxDecoration(
-          color: _hovered ? AAMColors.surface : AAMColors.white,
-          border: const Border(bottom: BorderSide(color: AAMColors.border, width: 1)),
+          color: _hovered ? widget.theme.surfaceCol : widget.theme.card,
+          border: Border(bottom: BorderSide(color: widget.theme.borderCol, width: 1)),
         ),
         child: Row(children: [
-          // Nombre
           Expanded(flex: 2, child: Row(children: [
             CircleAvatar(
               radius: 16,
@@ -181,61 +200,53 @@ class _UsuarioRowState extends State<_UsuarioRow> {
             ),
             const SizedBox(width: 10),
             Text(u.nombreCompleto,
-              style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: AAMColors.primary)),
+              style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: widget.theme.text)),
           ])),
-          // Username (monospace)
           Expanded(flex: 2, child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: AAMColors.surface,
+              color: widget.theme.surfaceCol,
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(u.username,
-              style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: AAMColors.primary)),
+              style: TextStyle(fontSize: 12, fontFamily: 'monospace', color: widget.theme.text)),
           )),
-          // Rol
           Expanded(flex: 2, child: AAMBadge(
             label: u.rol.label,
             color: isDireccion ? AAMColors.primary : AAMColors.accent,
           )),
-          // Turno
           Expanded(flex: 2, child: Text(u.turno ?? '—',
-            style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.textSec))),
-          // Estado
+            style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
           Expanded(flex: 2, child: AAMBadge(
             label: u.activo ? 'Activo' : 'Inactivo',
             color: u.activo ? AAMColors.success : AAMColors.textSec,
           )),
-          // Acciones
-          Expanded(flex: 1, child: Row(children: [
-            GestureDetector(
-              onTap: widget.onToggle,
-              child: Icon(Icons.block_outlined, size: 15,
-                color: _hovered ? AAMColors.highlight : AAMColors.textSec),
-            ),
-          ])),
+          Expanded(flex: 1, child: GestureDetector(
+            onTap: widget.onToggle,
+            child: Icon(Icons.block_outlined, size: 15,
+              color: _hovered ? AAMColors.highlight : widget.theme.textSec),
+          )),
         ]),
       ),
     );
   }
 }
 
-// ─── Formulario nuevo usuario ─────────────────────────────────────────────────
-class _NuevoUsuarioForm extends StatefulWidget {
-  const _NuevoUsuarioForm({required this.onClose, required this.onCreate});
-  final VoidCallback onClose;
+// ─── Modal nuevo usuario ───────────────────────────────────────────────────────
+class _NuevoUsuarioModal extends StatefulWidget {
+  const _NuevoUsuarioModal({required this.onCreate});
   final Future<void> Function(String nombre, String apellido, RolUsuario rol, String? turno) onCreate;
 
   @override
-  State<_NuevoUsuarioForm> createState() => _NuevoUsuarioFormState();
+  State<_NuevoUsuarioModal> createState() => _NuevoUsuarioModalState();
 }
 
-class _NuevoUsuarioFormState extends State<_NuevoUsuarioForm> {
+class _NuevoUsuarioModalState extends State<_NuevoUsuarioModal> {
   final _nombreCtrl   = TextEditingController();
   final _apellidoCtrl = TextEditingController();
-  RolUsuario _rol   = RolUsuario.preceptor;
-  String _turno     = 'Turno Mañana';
-  bool _loading     = false;
+  RolUsuario _rol  = RolUsuario.preceptor;
+  String _turno    = 'Turno Mañana';
+  bool _loading    = false;
   String? _error;
 
   String get _usernamePreview =>
@@ -244,104 +255,10 @@ class _NuevoUsuarioFormState extends State<_NuevoUsuarioForm> {
           : '';
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AAMColors.white,
-        border: Border.all(color: AAMColors.border),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Text('Nuevo usuario',
-            style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w700, color: AAMColors.primary)),
-          const Spacer(),
-          GestureDetector(
-            onTap: widget.onClose,
-            child: const Icon(Icons.close, size: 18, color: AAMColors.textSec),
-          ),
-        ]),
-        const SizedBox(height: 20),
-
-        _label('Apellido'),
-        const SizedBox(height: 6),
-        _input(_apellidoCtrl, 'Ej: Rodríguez'),
-        const SizedBox(height: 14),
-
-        _label('Nombre'),
-        const SizedBox(height: 6),
-        _input(_nombreCtrl, 'Ej: María'),
-        const SizedBox(height: 14),
-
-        _label('Rol'),
-        const SizedBox(height: 6),
-        _dropdown<RolUsuario>(
-          value: _rol,
-          items: RolUsuario.values,
-          labelOf: (r) => r.label,
-          onChanged: (v) { setState(() { _rol = v ?? _rol; }); },
-        ),
-        const SizedBox(height: 14),
-
-        if (_rol == RolUsuario.preceptor) ...[
-          _label('Turno'),
-          const SizedBox(height: 6),
-          _dropdown<String>(
-            value: _turno,
-            items: const ['Turno Mañana', 'Turno Tarde', 'Turno Vespertino'],
-            labelOf: (s) => s,
-            onChanged: (v) { setState(() { _turno = v ?? _turno; }); },
-          ),
-          const SizedBox(height: 14),
-        ],
-
-        if (_usernamePreview.isNotEmpty) ...[
-          _label('Usuario generado'),
-          const SizedBox(height: 6),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: AAMColors.surface,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(children: [
-              Text(_usernamePreview,
-                style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: AAMColors.primary)),
-              const Spacer(),
-              const Icon(Icons.auto_awesome, size: 14, color: AAMColors.accent),
-            ]),
-          ),
-          const SizedBox(height: 6),
-          Text('La contraseña inicial se genera automáticamente.',
-            style: GoogleFonts.dmSans(fontSize: 11, color: AAMColors.textSec)),
-        ],
-
-        if (_error != null) ...[
-          const SizedBox(height: 10),
-          Text(_error!, style: GoogleFonts.dmSans(fontSize: 12, color: AAMColors.highlight)),
-        ],
-
-        const SizedBox(height: 20),
-        GestureDetector(
-          onTap: _loading ? null : _submit,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: _loading ? AAMColors.accent.withAlpha((0.6 * 255).round()) : AAMColors.accent,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Center(child: _loading
-                ? const SizedBox(width: 18, height: 18,
-                    child: CircularProgressIndicator(color: AAMColors.white, strokeWidth: 2))
-                : Text('Crear usuario',
-                    style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600, color: AAMColors.white))),
-          ),
-        ),
-      ]),
-    );
+  void dispose() {
+    _nombreCtrl.dispose();
+    _apellidoCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _submit() async {
@@ -357,11 +274,165 @@ class _NuevoUsuarioFormState extends State<_NuevoUsuarioForm> {
         _rol,
         _rol == RolUsuario.preceptor ? _turno : null,
       );
+      if (mounted) Navigator.of(context).pop();
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: 420,
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          color: AAMColors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withAlpha((0.12 * 255).round()), blurRadius: 32, offset: const Offset(0, 8)),
+          ],
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Header
+          Row(children: [
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(color: AAMColors.primary, borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.person_add_outlined, size: 18, color: AAMColors.white),
+            ),
+            const SizedBox(width: 12),
+            Text('Nuevo usuario',
+              style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w700, color: AAMColors.primary)),
+            const Spacer(),
+            GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: Container(
+                width: 30, height: 30,
+                decoration: BoxDecoration(color: AAMColors.surface, borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.close, size: 16, color: AAMColors.textSec),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 24),
+
+          // Apellido
+          _label('Apellido'),
+          const SizedBox(height: 6),
+          _input(_apellidoCtrl, 'Ej: Rodríguez'),
+          const SizedBox(height: 14),
+
+          // Nombre
+          _label('Nombre'),
+          const SizedBox(height: 6),
+          _input(_nombreCtrl, 'Ej: María'),
+          const SizedBox(height: 14),
+
+          // Rol
+          _label('Rol'),
+          const SizedBox(height: 6),
+          _dropdown<RolUsuario>(
+            value: _rol,
+            items: RolUsuario.values,
+            labelOf: (r) => r.label,
+            onChanged: (v) => setState(() => _rol = v ?? _rol),
+          ),
+          const SizedBox(height: 14),
+
+          // Turno (solo si es preceptor)
+          if (_rol == RolUsuario.preceptor) ...[
+            _label('Turno'),
+            const SizedBox(height: 6),
+            _dropdown<String>(
+              value: _turno,
+              items: const ['Turno Mañana', 'Turno Tarde', 'Turno Vespertino'],
+              labelOf: (s) => s,
+              onChanged: (v) => setState(() => _turno = v ?? _turno),
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          // Preview usuario generado
+          if (_usernamePreview.isNotEmpty) ...[
+            _label('Usuario generado'),
+            const SizedBox(height: 6),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AAMColors.surface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AAMColors.accent.withAlpha((0.4 * 255).round())),
+              ),
+              child: Row(children: [
+                Text(_usernamePreview,
+                  style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: AAMColors.primary)),
+                const Spacer(),
+                const Icon(Icons.auto_awesome, size: 14, color: AAMColors.accent),
+              ]),
+            ),
+            const SizedBox(height: 6),
+            Text('La contraseña inicial se genera automáticamente.',
+              style: GoogleFonts.dmSans(fontSize: 11, color: AAMColors.textSec)),
+          ],
+
+          // Error
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AAMColors.danger.withAlpha((0.08 * 255).round()),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(children: [
+                const Icon(Icons.error_outline, size: 14, color: AAMColors.danger),
+                const SizedBox(width: 8),
+                Text(_error!, style: GoogleFonts.dmSans(fontSize: 12, color: AAMColors.danger)),
+              ]),
+            ),
+          ],
+
+          const SizedBox(height: 24),
+
+          // Botones
+          Row(children: [
+            Expanded(child: GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AAMColors.border),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Center(child: Text('Cancelar',
+                  style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600, color: AAMColors.textSec))),
+              ),
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: GestureDetector(
+              onTap: _loading ? null : _submit,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: _loading ? AAMColors.accent.withAlpha((0.6 * 255).round()) : AAMColors.accent,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Center(child: _loading
+                    ? const SizedBox(width: 18, height: 18,
+                        child: CircularProgressIndicator(color: AAMColors.white, strokeWidth: 2))
+                    : Text('Crear usuario',
+                        style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600, color: AAMColors.white))),
+              ),
+            )),
+          ]),
+        ]),
+      ),
+    );
   }
 
   Widget _label(String text) => Text(text,
@@ -370,7 +441,8 @@ class _NuevoUsuarioFormState extends State<_NuevoUsuarioForm> {
   Widget _input(TextEditingController ctrl, String hint) {
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: AAMColors.border), borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AAMColors.border),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: TextField(
         controller: ctrl,
@@ -396,7 +468,8 @@ class _NuevoUsuarioFormState extends State<_NuevoUsuarioForm> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        border: Border.all(color: AAMColors.border), borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AAMColors.border),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: DropdownButton<T>(
         value: value,

@@ -14,17 +14,57 @@ class AlumnosScreen extends StatefulWidget {
 }
 
 class _AlumnosScreenState extends State<AlumnosScreen> {
+  late final AlumnoRepositoryImpl _repo;
   late final GetAlumnos _getAlumnos;
   late Future<List<Alumno>> _future;
 
   String _searchQuery = '';
   String _filterCurso = 'Todos';
+  String _filterEstado = 'Todos';
 
   @override
   void initState() {
     super.initState();
-    _getAlumnos = GetAlumnos(AlumnoRepositoryImpl(MockDatasource()));
+    _repo = AlumnoRepositoryImpl(MockDatasource());
+    _getAlumnos = GetAlumnos(_repo);
     _future = _getAlumnos();
+  }
+
+  void _refresh() => setState(() => _future = _getAlumnos());
+
+  Future<void> _abrirNuevoAlumno() async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
+      builder: (_) => _AlumnoFormModal(
+        onSave: (alumno) async {
+          await _repo.crearAlumno(alumno.copyWith(id: 'tmp'));
+        },
+      ),
+    );
+    if (result == true) _refresh();
+  }
+
+  Future<void> _abrirDetalle(Alumno alumno) async {
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
+      builder: (_) => _AlumnoDetalleModal(alumno: alumno),
+    );
+  }
+
+  Future<void> _abrirEdicion(Alumno alumno) async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
+      builder: (_) => _AlumnoFormModal(
+        alumno: alumno,
+        onSave: (updated) async {
+          await _repo.actualizarAlumno(updated);
+        },
+      ),
+    );
+    if (result == true) _refresh();
   }
 
   List<Alumno> _applyFilters(List<Alumno> all) {
@@ -34,18 +74,36 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
           a.dni.contains(_searchQuery) ||
           a.curso.toLowerCase().contains(_searchQuery.toLowerCase());
       final matchCurso = _filterCurso == 'Todos' || a.curso == _filterCurso;
-      return matchSearch && matchCurso;
+      final matchEstado = switch (_filterEstado) {
+        'Todos' => true,
+        'Regular' => a.estadoRegularidad == EstadoRegularidad.regular,
+        'Irregular' => a.estadoRegularidad == EstadoRegularidad.irregular,
+        'En riesgo' => a.estadoRegularidad == EstadoRegularidad.enRiesgo,
+        'Recursante' => a.recursante,
+        _ => true,
+      };
+      return matchSearch && matchCurso && matchEstado;
     }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: AAMTheme(),
+      builder: (context, _) {
+        final theme = AAMTheme();
+        return _buildScreen(theme);
+      },
+    );
+  }
+
+  Widget _buildScreen(AAMTheme theme) {
     return Column(
       children: [
         AAMTopbar(
           title: 'Alumnos',
           actions: [
-            const AAMButton(label: 'Nuevo alumno',   icon: Icons.add),
+            AAMButton(label: 'Nuevo alumno', icon: Icons.add, onPressed: _abrirNuevoAlumno),
             const SizedBox(width: 8),
             const AAMButton(label: 'Importar Excel', icon: Icons.upload_file_outlined, outlined: true),
           ],
@@ -65,11 +123,7 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
 
               return Padding(
                 padding: const EdgeInsets.all(32),
-                child: Column(children: [
-                  _buildFilters(cursoOpts, snap.data!.length, alumnos.length),
-                  const SizedBox(height: 24),
-                  Expanded(child: _buildTable(alumnos)),
-                ]),
+                child: _buildContent(theme, cursoOpts, snap.data!.length, alumnos),
               );
             },
           ),
@@ -78,23 +132,31 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
     );
   }
 
-  Widget _buildFilters(List<String> cursos, int total, int filtered) {
+  Widget _buildContent(AAMTheme theme, List<String> cursoOpts, int totalAlumnos, List<Alumno> alumnos) {
+    return Column(children: [
+      _buildFilters(cursoOpts, totalAlumnos, alumnos.length, theme),
+      const SizedBox(height: 24),
+      Expanded(child: _buildTable(alumnos, theme)),
+    ]);
+  }
+
+  Widget _buildFilters(List<String> cursos, int total, int filtered, AAMTheme theme) {
     return Row(children: [
       Expanded(
         child: Container(
           height: 42,
           decoration: BoxDecoration(
-            color: AAMColors.white,
-            border: Border.all(color: AAMColors.border),
+            color: theme.card,
+            border: Border.all(color: theme.borderCol),
             borderRadius: BorderRadius.circular(10),
           ),
           child: TextField(
             onChanged: (v) => setState(() => _searchQuery = v),
-            style: GoogleFonts.dmSans(fontSize: 14, color: AAMColors.primary),
+            style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
             decoration: InputDecoration(
               hintText: 'Buscar por nombre, DNI o curso...',
-              hintStyle: GoogleFonts.dmSans(fontSize: 14, color: AAMColors.textSec),
-              prefixIcon: const Icon(Icons.search, size: 18, color: AAMColors.textSec),
+              hintStyle: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec),
+              prefixIcon: Icon(Icons.search, size: 18, color: theme.textSec),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(vertical: 12),
             ),
@@ -105,31 +167,53 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: AAMColors.white,
-          border: Border.all(color: AAMColors.border),
+          color: theme.card,
+          border: Border.all(color: theme.borderCol),
           borderRadius: BorderRadius.circular(10),
         ),
         child: DropdownButton<String>(
           value: _filterCurso,
           underline: const SizedBox.shrink(),
-          style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.primary),
+          style: GoogleFonts.dmSans(fontSize: 13, color: theme.text),
           items: cursos.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
           onChanged: (v) => setState(() => _filterCurso = v ?? 'Todos'),
         ),
       ),
       const SizedBox(width: 12),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: theme.card,
+          border: Border.all(color: theme.borderCol),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: DropdownButton<String>(
+          value: _filterEstado,
+          underline: const SizedBox.shrink(),
+          style: GoogleFonts.dmSans(fontSize: 13, color: theme.text),
+          items: const [
+            'Todos',
+            'Regular',
+            'Irregular',
+            'En riesgo',
+            'Recursante',
+          ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+          onChanged: (v) => setState(() => _filterEstado = v ?? 'Todos'),
+        ),
+      ),
+      const SizedBox(width: 12),
       Text(
         '$filtered de $total alumnos',
-        style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.textSec),
+        style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
       ),
     ]);
   }
 
-  Widget _buildTable(List<Alumno> alumnos) {
+  Widget _buildTable(List<Alumno> alumnos, AAMTheme theme) {
     return Container(
       decoration: BoxDecoration(
-        color: AAMColors.white,
-        border: Border.all(color: AAMColors.border),
+        color: theme.card,
+        border: Border.all(color: theme.borderCol),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(children: [
@@ -143,10 +227,27 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
           ('',             1),
         ]),
         Expanded(
-          child: ListView.builder(
-            itemCount: alumnos.length,
-            itemBuilder: (ctx, i) => _AlumnoRow(alumno: alumnos[i]),
-          ),
+          child: alumnos.isEmpty
+              ? Center(child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.group_add_outlined, size: 44, color: theme.borderCol),
+                    const SizedBox(height: 14),
+                    Text('No hay alumnos cargados aún',
+                      style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec)),
+                    const SizedBox(height: 8),
+                    AAMButton(label: 'Agregar primer alumno', onPressed: _abrirNuevoAlumno),
+                  ],
+                ))
+              : ListView.builder(
+                  itemCount: alumnos.length,
+                  itemBuilder: (ctx, i) => _AlumnoRow(
+                    alumno: alumnos[i],
+                    theme: theme,
+                    onVerDetalle: () => _abrirDetalle(alumnos[i]),
+                    onEditar: () => _abrirEdicion(alumnos[i]),
+                  ),
+                ),
         ),
       ]),
     );
@@ -155,8 +256,17 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
 
 // ─── Fila de alumno ───────────────────────────────────────────────────────────
 class _AlumnoRow extends StatefulWidget {
-  const _AlumnoRow({required this.alumno});
+  const _AlumnoRow({
+    required this.alumno,
+    required this.theme,
+    required this.onVerDetalle,
+    required this.onEditar,
+  });
+
   final Alumno alumno;
+  final AAMTheme theme;
+  final VoidCallback onVerDetalle;
+  final VoidCallback onEditar;
 
   @override
   State<_AlumnoRow> createState() => _AlumnoRowState();
@@ -187,57 +297,481 @@ class _AlumnoRowState extends State<_AlumnoRow> {
       onEnter: (_) => setState(() => _hovered = true),
       onExit:  (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        decoration: BoxDecoration(
-          color: _hovered ? AAMColors.surface : AAMColors.white,
-          border: const Border(bottom: BorderSide(color: AAMColors.border, width: 1)),
+      child: GestureDetector(
+        onTap: widget.onVerDetalle,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          decoration: BoxDecoration(
+            color: _hovered ? widget.theme.surfaceCol : widget.theme.card,
+            border: Border(bottom: BorderSide(color: widget.theme.borderCol, width: 1)),
+          ),
+          child: Row(children: [
+            // Alumno
+            Expanded(flex: 3, child: Row(children: [
+              CircleAvatar(
+                radius: 16,
+                backgroundColor: AAMColors.mint,
+                child: Text(a.apellido.substring(0, 1),
+                  style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: widget.theme.text)),
+              ),
+              const SizedBox(width: 10),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(a.nombreCompleto,
+                  style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: widget.theme.text)),
+                if (a.recursante)
+                  Row(children: [
+                    Icon(Icons.repeat_outlined, size: 14, color: AAMColors.accent),
+                    const SizedBox(width: 4),
+                    Text('Recursante', style: GoogleFonts.dmSans(fontSize: 10, color: AAMColors.accent)),
+                  ]),
+              ]),
+            ])),
+            // Curso
+            Expanded(flex: 2, child: Text(a.curso,
+              style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.text))),
+            // Especialidad
+            Expanded(flex: 2, child: Text(a.especialidad,
+              style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
+            // DNI
+            Expanded(flex: 2, child: Text(a.dni,
+              style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
+            // Asistencia
+            Expanded(flex: 2, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${a.porcentajeAsistencia.toStringAsFixed(1)}%',
+                style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: _asistColor)),
+              const SizedBox(height: 4),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: a.porcentajeAsistencia / 100,
+                  minHeight: 6,
+                  color: _asistColor,
+                  backgroundColor: widget.theme.borderCol,
+                ),
+              ),
+            ])),
+            // Estado
+            Expanded(flex: 2, child: AAMBadge(label: estadoLabel, color: estadoColor)),
+            // Acciones
+            Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              _ActionBtn(
+                icon: Icons.visibility_outlined,
+                color: widget.theme.text,
+                tooltip: 'Ver detalle',
+                onTap: widget.onVerDetalle,
+              ),
+              const SizedBox(width: 6),
+              _ActionBtn(
+                icon: Icons.edit_outlined,
+                color: AAMColors.accent,
+                tooltip: 'Editar alumno',
+                onTap: widget.onEditar,
+              ),
+            ])),
+          ]),
         ),
-        child: Row(children: [
-          // Alumno
-          Expanded(flex: 3, child: Row(children: [
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: AAMColors.mint,
-              child: Text(a.apellido.substring(0, 1),
-                style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: AAMColors.primary)),
-            ),
-            const SizedBox(width: 10),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(a.nombreCompleto,
-                style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: AAMColors.primary)),
-              if (a.recursante)
-                Text('Recursante',
-                  style: GoogleFonts.dmSans(fontSize: 10, color: AAMColors.textSec)),
-            ]),
-          ])),
-          // Curso
-          Expanded(flex: 2, child: Text(a.curso,
-            style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.primary))),
-          // Especialidad
-          Expanded(flex: 2, child: Text(a.especialidad,
-            style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.textSec))),
-          // DNI
-          Expanded(flex: 2, child: Text(a.dni,
-            style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.textSec))),
-          // Asistencia
-          Expanded(flex: 2, child: Text(
-            '${a.porcentajeAsistencia.toStringAsFixed(1)}%',
-            style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: _asistColor),
-          )),
-          // Estado
-          Expanded(flex: 2, child: AAMBadge(label: estadoLabel, color: estadoColor)),
-          // Acciones
-          Expanded(flex: 1, child: Row(children: [
-            Icon(Icons.visibility_outlined, size: 16,
-              color: _hovered ? AAMColors.primary : AAMColors.textSec),
-            const SizedBox(width: 10),
-            Icon(Icons.edit_outlined, size: 16,
-              color: _hovered ? AAMColors.primary : AAMColors.textSec),
-          ])),
-        ]),
       ),
+    );
+  }
+}
+
+class _ActionBtn extends StatefulWidget {
+  const _ActionBtn({required this.icon, required this.color, required this.tooltip, required this.onTap});
+  final IconData icon;
+  final Color color;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  State<_ActionBtn> createState() => _ActionBtnState();
+}
+
+class _ActionBtnState extends State<_ActionBtn> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit:  (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: _hovered ? widget.color.withAlpha((0.16 * 255).round()) : widget.color.withAlpha((0.08 * 255).round()),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Tooltip(
+            message: widget.tooltip,
+            child: Icon(widget.icon, size: 16, color: widget.color),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AlumnoDetalleModal extends StatelessWidget {
+  const _AlumnoDetalleModal({required this.alumno});
+  final Alumno alumno;
+
+  @override
+  Widget build(BuildContext context) {
+    final (estadoLabel, estadoColor) = switch (alumno.estadoRegularidad) {
+      EstadoRegularidad.regular => ('Regular', AAMColors.success),
+      EstadoRegularidad.irregular => ('Irregular', AAMColors.warning),
+      EstadoRegularidad.enRiesgo => ('En riesgo', AAMColors.highlight),
+    };
+
+    return AnimatedBuilder(
+      animation: AAMTheme(),
+      builder: (context, _) {
+        final theme = AAMTheme();
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            width: 500,
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: theme.card,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [BoxShadow(color: Colors.black.withAlpha((0.12 * 255).round()), blurRadius: 32, offset: const Offset(0, 8))],
+            ),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Container(
+                  width: 36, height: 36,
+                  decoration: BoxDecoration(color: AAMColors.primary, borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.person, size: 18, color: AAMColors.white),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(alumno.nombreCompleto, style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w700, color: theme.text)),
+                  const SizedBox(height: 4),
+                  Text('${alumno.curso} · ${alumno.especialidad} · ${alumno.turno}',
+                    style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
+                ])),
+                GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Container(
+                    width: 30, height: 30,
+                    decoration: BoxDecoration(color: theme.surfaceCol, borderRadius: BorderRadius.circular(8)),
+                    child: Icon(Icons.close, size: 16, color: theme.textSec),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 24),
+              Text('Asistencia', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: theme.textSec)),
+              const SizedBox(height: 10),
+              Row(children: [
+                Text('${alumno.porcentajeAsistencia.toStringAsFixed(1)}%',
+                  style: GoogleFonts.dmSans(fontSize: 32, fontWeight: FontWeight.w700, color: estadoColor)),
+                const SizedBox(width: 14),
+                Expanded(child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: LinearProgressIndicator(
+                    value: alumno.porcentajeAsistencia / 100,
+                    minHeight: 10,
+                    color: estadoColor,
+                    backgroundColor: theme.borderCol,
+                  ),
+                )),
+              ]),
+              const SizedBox(height: 20),
+              Wrap(spacing: 10, runSpacing: 10, children: [
+                _DetalleChip(label: 'DNI', value: alumno.dni),
+                _DetalleChip(label: 'Curso', value: alumno.curso),
+                _DetalleChip(label: 'Turno', value: alumno.turno),
+                _DetalleChip(label: 'Especialidad', value: alumno.especialidad),
+                _DetalleChip(label: 'Estado', value: estadoLabel, color: estadoColor),
+                if (alumno.recursante)
+                  _DetalleChip(label: 'Recursante', value: 'Sí', color: AAMColors.accent),
+              ]),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: theme.surfaceCol, borderRadius: BorderRadius.circular(14)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Avance del período', style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec)),
+                  const SizedBox(height: 10),
+                  LinearProgressIndicator(
+                    value: alumno.porcentajeAsistencia / 100,
+                    minHeight: 8,
+                    color: estadoColor,
+                    backgroundColor: theme.borderCol,
+                  ),
+                ]),
+              ),
+            ]),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _AlumnoFormModal extends StatefulWidget {
+  const _AlumnoFormModal({this.alumno, required this.onSave});
+
+  final Alumno? alumno;
+  final Future<void> Function(Alumno alumno) onSave;
+
+  @override
+  State<_AlumnoFormModal> createState() => _AlumnoFormModalState();
+}
+
+class _AlumnoFormModalState extends State<_AlumnoFormModal> {
+  late final TextEditingController _nombreCtrl;
+  late final TextEditingController _apellidoCtrl;
+  late final TextEditingController _dniCtrl;
+  late final TextEditingController _especialidadCtrl;
+  String _curso = '4° 1°';
+  String _turno = 'Mañana';
+  bool _recursante = false;
+  bool _loading = false;
+  String? _error;
+
+  static const List<String> _cursos = [
+    '4° 1°', '4° 2°', '5° 1°', '5° 2°',
+  ];
+  static const List<String> _turnos = ['Mañana', 'Tarde', 'Vespertino'];
+
+  @override
+  void initState() {
+    super.initState();
+    _nombreCtrl = TextEditingController(text: widget.alumno?.nombre ?? '');
+    _apellidoCtrl = TextEditingController(text: widget.alumno?.apellido ?? '');
+    _dniCtrl = TextEditingController(text: widget.alumno?.dni ?? '');
+    _especialidadCtrl = TextEditingController(text: widget.alumno?.especialidad ?? '');
+    _curso = widget.alumno?.curso ?? _curso;
+    _turno = widget.alumno?.turno ?? _turno;
+    _recursante = widget.alumno?.recursante ?? false;
+  }
+
+  @override
+  void dispose() {
+    _nombreCtrl.dispose();
+    _apellidoCtrl.dispose();
+    _dniCtrl.dispose();
+    _especialidadCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_nombreCtrl.text.trim().isEmpty || _apellidoCtrl.text.trim().isEmpty || _dniCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Completa nombre, apellido y DNI.');
+      return;
+    }
+    setState(() { _loading = true; _error = null; });
+    try {
+      final alumno = Alumno(
+        id: widget.alumno?.id ?? 'tmp',
+        nombre: _nombreCtrl.text.trim(),
+        apellido: _apellidoCtrl.text.trim(),
+        dni: _dniCtrl.text.trim(),
+        cursoId: _curso.toLowerCase().replaceAll(' ', '_'),
+        curso: _curso,
+        especialidad: _especialidadCtrl.text.trim(),
+        turno: _turno,
+        recursante: _recursante,
+        porcentajeAsistencia: widget.alumno?.porcentajeAsistencia ?? 100.0,
+      );
+      await widget.onSave(alumno);
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: AAMTheme(),
+      builder: (context, _) {
+        final theme = AAMTheme();
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            width: 480,
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: theme.card,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [BoxShadow(color: Colors.black.withAlpha((0.12 * 255).round()), blurRadius: 32, offset: const Offset(0, 8))],
+            ),
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(color: AAMColors.primary, borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.person_add_outlined, size: 18, color: AAMColors.white),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(
+                    widget.alumno == null ? 'Nuevo alumno' : 'Editar alumno',
+                    style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w700, color: theme.text),
+                  )),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(false),
+                    child: Container(
+                      width: 30, height: 30,
+                      decoration: BoxDecoration(color: theme.surfaceCol, borderRadius: BorderRadius.circular(8)),
+                      child: Icon(Icons.close, size: 16, color: theme.textSec),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 24),
+                _FieldGroup(label: 'Apellido', child: _buildInput(_apellidoCtrl, 'Ej: Rodríguez')),
+                const SizedBox(height: 16),
+                _FieldGroup(label: 'Nombre', child: _buildInput(_nombreCtrl, 'Ej: María')),
+                const SizedBox(height: 16),
+                _FieldGroup(label: 'DNI', child: _buildInput(_dniCtrl, 'Ej: 12345678')),
+                const SizedBox(height: 16),
+                Row(children: [
+                  Expanded(child: _DropdownGroup(label: 'Curso', value: _curso, options: _cursos, onChanged: (v) => setState(() => _curso = v))),
+                  const SizedBox(width: 16),
+                  Expanded(child: _DropdownGroup(label: 'Turno', value: _turno, options: _turnos, onChanged: (v) => setState(() => _turno = v))),
+                ]),
+                const SizedBox(height: 16),
+                _FieldGroup(label: 'Especialidad', child: _buildInput(_especialidadCtrl, 'Ej: Informática')),
+                const SizedBox(height: 16),
+                Row(children: [
+                  Switch(value: _recursante, onChanged: (v) => setState(() => _recursante = v)),
+                  const SizedBox(width: 8),
+                  Text('Recursante', style: GoogleFonts.dmSans(fontSize: 14, color: theme.text)),
+                ]),
+                if (_error != null) ...[
+                  const SizedBox(height: 14),
+                  Text(_error!, style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.highlight)),
+                ],
+                const SizedBox(height: 24),
+                Row(children: [
+                  Expanded(child: GestureDetector(
+                    onTap: () => Navigator.of(context).pop(false),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(10)),
+                      child: Center(child: Text('Cancelar', style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec))),
+                    ),
+                  )),
+                  const SizedBox(width: 14),
+                  Expanded(child: GestureDetector(
+                    onTap: _loading ? null : _submit,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(color: _loading ? AAMColors.accent.withAlpha((0.6 * 255).round()) : AAMColors.accent, borderRadius: BorderRadius.circular(10)),
+                      child: Center(child: _loading
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: AAMColors.white, strokeWidth: 2))
+                        : Text(widget.alumno == null ? 'Crear alumno' : 'Guardar cambios',
+                            style: GoogleFonts.dmSans(fontSize: 14, color: AAMColors.white))),
+                    ),
+                  )),
+                ]),
+              ]),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildInput(TextEditingController controller, String hint) {
+    final theme = AAMTheme();
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.borderCol),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: TextField(
+        controller: controller,
+        style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        ),
+      ),
+    );
+  }
+}
+
+class _FieldGroup extends StatelessWidget {
+  const _FieldGroup({required this.label, required this.child});
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AAMTheme();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: theme.textSec)),
+      const SizedBox(height: 6),
+      child,
+    ]);
+  }
+}
+
+class _DropdownGroup extends StatelessWidget {
+  const _DropdownGroup({required this.label, required this.value, required this.options, required this.onChanged});
+  final String label;
+  final String value;
+  final List<String> options;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AAMTheme();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: theme.textSec)),
+      const SizedBox(height: 6),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          border: Border.all(color: theme.borderCol),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: DropdownButton<String>(
+          value: value,
+          underline: const SizedBox.shrink(),
+          isExpanded: true,
+          style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
+          items: options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
+          onChanged: (v) {
+            if (v != null) onChanged(v);
+          },
+        ),
+      ),
+    ]);
+  }
+}
+
+class _DetalleChip extends StatelessWidget {
+  const _DetalleChip({required this.label, required this.value, this.color = AAMColors.border});
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AAMTheme();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withAlpha((0.12 * 255).round()),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text('$label: ', style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+        Text(value, style: GoogleFonts.dmSans(fontSize: 12, color: theme.text)),
+      ]),
     );
   }
 }
