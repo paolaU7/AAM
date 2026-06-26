@@ -1,5 +1,4 @@
 import '../entities/curso.dart';
-import '../entities/registro_asistencia.dart';
 import '../repositories/asistencia_repository.dart';
 import '../repositories/curso_repository.dart';
 

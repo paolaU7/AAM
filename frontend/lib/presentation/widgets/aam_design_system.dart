@@ -146,7 +146,7 @@ class AAMStatCard extends StatelessWidget {
               Container(
                 width: 40, height: 40,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
+                  color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon, color: color, size: 20),
@@ -177,7 +177,7 @@ class AAMBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -351,14 +351,12 @@ class AAMThemeToggle extends StatefulWidget {
 class _AAMThemeToggleState extends State<AAMThemeToggle>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
-  late final Animation<double> _anim;
   final _theme = AAMTheme();
 
   @override
   void initState() {
     super.initState();
     _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 250));
-    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
     _theme.addListener(_onThemeChange);
     if (_theme.isDark) _ctrl.value = 1.0;
   }

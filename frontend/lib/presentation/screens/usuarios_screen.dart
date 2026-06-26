@@ -74,10 +74,14 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
           child: FutureBuilder<List<Usuario>>(
             future: _future,
             builder: (context, snap) {
-              if (snap.connectionState != ConnectionState.done) return const AAMLoadingScreen();
-              if (snap.hasError) return AAMErrorWidget(
-                message: 'Error al cargar usuarios', onRetry: _refresh,
-              );
+              if (snap.connectionState != ConnectionState.done) {
+                return const AAMLoadingScreen();
+              }
+              if (snap.hasError) {
+                return AAMErrorWidget(
+                  message: 'Error al cargar usuarios', onRetry: _refresh,
+                );
+              }
 
               return Padding(
                 padding: const EdgeInsets.all(32),

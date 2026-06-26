@@ -39,6 +39,7 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
 
   Future<void> _abrirNuevoAlumno() async {
     final cursos = await _cursoRepo.getCursos();
+    if (!mounted) return;
     final result = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
@@ -62,6 +63,7 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
 
   Future<void> _abrirEdicion(Alumno alumno) async {
     final cursos = await _cursoRepo.getCursos();
+    if (!mounted) return;
     final result = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
@@ -121,11 +123,15 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
           child: FutureBuilder<List<Alumno>>(
             future: _future,
             builder: (context, snap) {
-              if (snap.connectionState != ConnectionState.done) return const AAMLoadingScreen();
-              if (snap.hasError) return AAMErrorWidget(
-                message: 'Error al cargar alumnos',
-                onRetry: () => setState(() => _future = _getAlumnos()),
-              );
+              if (snap.connectionState != ConnectionState.done) {
+                return const AAMLoadingScreen();
+              }
+              if (snap.hasError) {
+                return AAMErrorWidget(
+                  message: 'Error al cargar alumnos',
+                  onRetry: () => setState(() => _future = _getAlumnos()),
+                );
+              }
 
               final alumnos  = _applyFilters(snap.data!);
               final cursoOpts = ['Todos', ...snap.data!.map((a) => a.curso).toSet().toList()..sort()];

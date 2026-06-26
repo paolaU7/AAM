@@ -5,8 +5,7 @@ import '../datasources/mock_datasource.dart';
 import '../datasources/api_datasource.dart';
 
 class AsistenciaRepositoryImpl implements AsistenciaRepository {
-  AsistenciaRepositoryImpl(this._datasource);
-  final ApiDatasource _datasource;
+  AsistenciaRepositoryImpl(ApiDatasource datasource);
   final MockDatasource _mock = MockDatasource();
 
   @override

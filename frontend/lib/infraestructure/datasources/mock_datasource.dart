@@ -44,8 +44,4 @@ class MockDatasource {
   // ── Usuarios ───────────────────────────────────────────────────────────────
   List<Usuario> getUsuarios() => [];
 }
-
-extension _DateTimeCopy on DateTime {
-  DateTime copyWith({int? hour, int? minute}) =>
-      DateTime(year, month, day, hour ?? this.hour, minute ?? this.minute);
-}
+

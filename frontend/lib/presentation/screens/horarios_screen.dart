@@ -272,7 +272,7 @@ class _HorariosScreenState extends State<HorariosScreen> {
                         return SizedBox(
                           width: colW,
                           child: esRecreo
-                              ? Container(color: AAMColors.mint.withOpacity(0.25),
+                              ? Container(color: AAMColors.mint.withValues(alpha: 0.25),
                                   child: Center(child: Text('— Recreo —',
                                     style: GoogleFonts.dmSans(fontSize: 10, color: AAMColors.accent, fontWeight: FontWeight.w600))))
                               : celda != null
