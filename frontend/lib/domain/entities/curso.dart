@@ -1,58 +1,68 @@
 /// Entidad de dominio: Curso
+///
+/// Refleja el esquema nuevo de la BDD: un curso es la combinación de las cuatro
+/// dimensiones independientes (año, división, especialidad, turno). Los grupos
+/// de taller ya no forman parte del curso: son una relación N:M aparte
+/// (`workshopGroups`).
 class Curso {
   const Curso({
     required this.id,
     required this.anio,
     required this.division,
-    this.grupoTaller = '',
     required this.especialidad,
     required this.turno,
+    this.workshopGroups = const [],
     required this.totalAlumnos,
     this.preceptorId,
-    this.horarioIngreso,
-    this.horarioEgreso,
-  });
+    String? nombre,
+    String? horario,
+  })  : _nombre = nombre,
+        _horario = horario;
 
   final String id;
-  final int anio;           // 1–6
-  final String division;    // "1°", "2°", "3°", "4°"...
-  final String grupoTaller; // "A", "B", "C"... (grupo de taller dentro del año/división)
+  final String anio;                 // nombre del año lectivo, p.ej. "4"
+  final String division;             // "A", "B", "C"...
   final String especialidad;
-  final String turno;       // "mañana" | "tarde" | "vespertino"
+  final String turno;                // "Mañana" | "Tarde" | "Vespertino"
+  final List<String> workshopGroups; // grupos de taller (N:M), p.ej. ["Robótica"]
   final int totalAlumnos;
   final String? preceptorId;
-  final String? horarioIngreso; // "08:00"
-  final String? horarioEgreso;  // "12:20"
 
-  String get nombre => '$anio° $division° $grupoTaller — $especialidad';
-  String get horario =>
-      (horarioIngreso != null && horarioEgreso != null)
-          ? '$horarioIngreso – $horarioEgreso'
-          : '';
+  // Provistos por el backend (CourseResponse). Si faltan, se derivan.
+  final String? _nombre;
+  final String? _horario;
+
+  String get nombre =>
+      _nombre ?? '$anio° $division° — $especialidad — $turno';
+
+  String get horario => _horario ?? '';
+
+  /// Compat: representación de los talleres como texto unido.
+  String get grupoTaller => workshopGroups.join(', ');
 
   Curso copyWith({
     String? id,
-    int? anio,
+    String? anio,
     String? division,
-    String? grupoTaller,
     String? especialidad,
     String? turno,
+    List<String>? workshopGroups,
     int? totalAlumnos,
     String? preceptorId,
-    String? horarioIngreso,
-    String? horarioEgreso,
+    String? nombre,
+    String? horario,
   }) {
     return Curso(
       id:             id             ?? this.id,
       anio:           anio           ?? this.anio,
       division:       division       ?? this.division,
-      grupoTaller:    grupoTaller    ?? this.grupoTaller,
       especialidad:   especialidad   ?? this.especialidad,
       turno:          turno          ?? this.turno,
+      workshopGroups: workshopGroups ?? this.workshopGroups,
       totalAlumnos:   totalAlumnos   ?? this.totalAlumnos,
       preceptorId:    preceptorId    ?? this.preceptorId,
-      horarioIngreso: horarioIngreso ?? this.horarioIngreso,
-      horarioEgreso:  horarioEgreso  ?? this.horarioEgreso,
+      nombre:         nombre         ?? _nombre,
+      horario:        horario        ?? _horario,
     );
   }
 }

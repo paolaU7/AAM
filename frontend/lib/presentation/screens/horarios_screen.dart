@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../domain/entities/curso.dart';
+import '../../domain/entities/workshop_group.dart';
 import '../../infraestructure/datasources/api_datasource.dart';
 import '../../infraestructure/repositories/curso_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
@@ -14,12 +15,16 @@ class HorariosScreen extends StatefulWidget {
 
 class _HorariosScreenState extends State<HorariosScreen> {
   late final CursoRepositoryImpl _repo;
+  final ApiDatasource _ds = ApiDatasource();
   List<Curso> _cursos = [];
+  List<WorkshopGroup> _talleres = [];
 
   String _cicloLectivo = '2026';
-  int? _anioSel;
+  String? _anioSel;
   String? _divisionSel;
-  String? _grupoSel;
+  String? _especialidadSel;
+  String? _turnoSel;
+  WorkshopGroup? _tallerSel;
 
   static const List<String> _ciclosLectivos = ['2024', '2025', '2026'];
   static const List<String> _dias   = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
@@ -42,8 +47,9 @@ class _HorariosScreenState extends State<HorariosScreen> {
   @override
   void initState() {
     super.initState();
-    _repo = CursoRepositoryImpl(ApiDatasource());
+    _repo = CursoRepositoryImpl(_ds);
     _cargarCursos();
+    _cargarTalleres();
   }
 
   Future<void> _cargarCursos() async {
@@ -51,7 +57,16 @@ class _HorariosScreenState extends State<HorariosScreen> {
     if (mounted) setState(() => _cursos = cursos);
   }
 
-  List<int> get _anios {
+  Future<void> _cargarTalleres() async {
+    try {
+      final talleres = await _ds.getWorkshopGroups();
+      if (mounted) setState(() => _talleres = talleres);
+    } catch (_) {
+      // catálogo opcional; el resto de la pantalla funciona sin él
+    }
+  }
+
+  List<String> get _anios {
     final s = _cursos.map((c) => c.anio).toSet().toList();
     s.sort();
     return s;
@@ -64,22 +79,41 @@ class _HorariosScreenState extends State<HorariosScreen> {
     return s;
   }
 
-  List<String> get _grupos {
+  List<String> get _especialidades {
     if (_anioSel == null || _divisionSel == null) return [];
     final s = _cursos
         .where((c) => c.anio == _anioSel && c.division == _divisionSel)
-        .map((c) => c.grupoTaller)
+        .map((c) => c.especialidad)
         .toSet()
         .toList();
     s.sort();
     return s;
   }
 
+  List<String> get _turnos {
+    if (_anioSel == null || _divisionSel == null || _especialidadSel == null) return [];
+    final s = _cursos
+        .where((c) => c.anio == _anioSel && c.division == _divisionSel && c.especialidad == _especialidadSel)
+        .map((c) => c.turno)
+        .toSet()
+        .toList();
+    s.sort();
+    return s;
+  }
+
+  // Un curso queda unívocamente identificado por las 4 dimensiones
+  // (año + división + especialidad + turno); el UNIQUE de `courses` está sobre
+  // esas 4 columnas, así que resolver con menos puede devolver el curso equivocado.
   Curso? get _cursoResuelto {
-    if (_anioSel == null || _divisionSel == null || _grupoSel == null) return null;
+    if (_anioSel == null || _divisionSel == null || _especialidadSel == null || _turnoSel == null) {
+      return null;
+    }
     try {
       return _cursos.firstWhere((c) =>
-          c.anio == _anioSel && c.division == _divisionSel && c.grupoTaller == _grupoSel);
+          c.anio == _anioSel &&
+          c.division == _divisionSel &&
+          c.especialidad == _especialidadSel &&
+          c.turno == _turnoSel);
     } catch (_) {
       return null;
     }
@@ -142,7 +176,7 @@ class _HorariosScreenState extends State<HorariosScreen> {
           onChanged: (v) => setState(() => _cicloLectivo = v ?? _cicloLectivo),
         ),
         const SizedBox(width: 16),
-        _FiltroDropdown<int>(
+        _FiltroDropdown<String>(
           label: 'Año',
           value: _anioSel,
           options: _anios,
@@ -151,7 +185,8 @@ class _HorariosScreenState extends State<HorariosScreen> {
           onChanged: (v) => setState(() {
             _anioSel = v;
             _divisionSel = null;
-            _grupoSel = null;
+            _especialidadSel = null;
+            _turnoSel = null;
           }),
         ),
         const SizedBox(width: 16),
@@ -162,16 +197,37 @@ class _HorariosScreenState extends State<HorariosScreen> {
           theme: theme,
           onChanged: _anioSel == null ? null : (v) => setState(() {
             _divisionSel = v;
-            _grupoSel = null;
+            _especialidadSel = null;
+            _turnoSel = null;
           }),
         ),
         const SizedBox(width: 16),
         _FiltroDropdown<String>(
-          label: 'Grupo de taller',
-          value: _grupoSel,
-          options: _grupos,
+          label: 'Especialidad',
+          value: _especialidadSel,
+          options: _especialidades,
           theme: theme,
-          onChanged: _divisionSel == null ? null : (v) => setState(() => _grupoSel = v),
+          onChanged: _divisionSel == null ? null : (v) => setState(() {
+            _especialidadSel = v;
+            _turnoSel = null;
+          }),
+        ),
+        const SizedBox(width: 16),
+        _FiltroDropdown<String>(
+          label: 'Turno',
+          value: _turnoSel,
+          options: _turnos,
+          theme: theme,
+          onChanged: _especialidadSel == null ? null : (v) => setState(() => _turnoSel = v),
+        ),
+        const SizedBox(width: 16),
+        _FiltroDropdown<WorkshopGroup>(
+          label: 'Grupo de taller',
+          value: _tallerSel,
+          options: _talleres,
+          theme: theme,
+          itemLabel: (w) => w.name,
+          onChanged: _talleres.isEmpty ? null : (v) => setState(() => _tallerSel = v),
         ),
         if (_cursoResuelto != null) ...
           [

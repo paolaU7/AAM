@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import health, cursos, alumnos
+from app.api.routes import health, alumnos
+from app.api.routes.courses import router as courses_router
+from app.api.routes.workshop_groups import router as workshop_groups_router
 
 app = FastAPI(title="AAM API", version="0.1.0")
 
@@ -13,5 +15,6 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
-app.include_router(cursos.router)
+app.include_router(courses_router)
+app.include_router(workshop_groups_router)
 app.include_router(alumnos.router)

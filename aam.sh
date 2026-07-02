@@ -231,11 +231,11 @@ cmd_help() {
     echo -e "
 ${BOLD}${CYAN}AAM CLI${RESET}
 
-${GREEN}aam build${RESET}
-${GREEN}aam run${RESET}
-${GREEN}aam run-back${RESET}
-${GREEN}aam run-front${RESET}
-${GREEN}aam push${RESET}
+${GREEN}aam build${RESET}       - Ejecuta verificación de dependencias y análisis para backend y frontend
+${GREEN}aam run${RESET}         - Inicia backend y frontend juntos
+${GREEN}aam run-back${RESET}    - Inicia solo el backend
+${GREEN}aam run-front${RESET}   - Inicia solo el frontend
+${GREEN}aam push${RESET}        - Agrega, commitea y sube cambios a una rama existente
 "
 }
 
