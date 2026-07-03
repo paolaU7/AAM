@@ -28,7 +28,7 @@ def get_courses(db: Session = Depends(get_db)):
     repo = CourseRepositoryImpl(db)
     cursos = GetCourses(repo).execute()
     return [CourseResponse(
-        id=c.id,
+        id=str(c.id),
         anio=c.academic_year,
         division=c.division,
         grupo_taller=", ".join(c.workshop_groups),
@@ -47,7 +47,7 @@ def get_course(id: str, db: Session = Depends(get_db)):
     if not curso:
         raise HTTPException(status_code=404, detail="Course not found")
     return CourseResponse(
-        id=curso.id,
+        id=str(curso.id),
         anio=curso.academic_year,
         division=curso.division,
         grupo_taller=", ".join(curso.workshop_groups),
@@ -64,7 +64,7 @@ def get_courses_by_shift(shift_name: str, db: Session = Depends(get_db)):
     repo = CourseRepositoryImpl(db)
     cursos = GetCoursesByShift(repo).execute(shift_name)
     return [CourseResponse(
-        id=c.id,
+        id=str(c.id),
         anio=c.academic_year,
         division=c.division,
         grupo_taller=", ".join(c.workshop_groups),

@@ -37,9 +37,9 @@ router = APIRouter(prefix="/alumnos", tags=["alumnos"])
 
 def _to_response(a: Alumno) -> AlumnoResponse:
     return AlumnoResponse(
-        id=a.id, nombre=a.nombre, apellido=a.apellido,
+        id=str(a.id), nombre=a.nombre, apellido=a.apellido,
         nombre_completo=a.nombre_completo, dni=a.dni,
-        curso_id=a.curso_id, curso=a.curso, especialidad=a.especialidad,
+        curso_id=str(a.curso_id), curso=a.curso, especialidad=a.especialidad,
         turno=a.turno, recursante=a.recursante,
         porcentaje_asistencia=a.porcentaje_asistencia,
         estado_regularidad=a.estado_regularidad.value

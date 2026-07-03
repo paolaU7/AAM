@@ -45,7 +45,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               if (snap.hasError) {
                 return AAMErrorWidget(
                   message: 'Error al cargar el dashboard',
-                  onRetry: () => setState(() => _future = _getResumen(DateTime.now())),
+                  onRetry: () => setState(() { _future = _getResumen(DateTime.now()); }),
                 );
               }
               return _DashboardContent(data: snap.data!);
