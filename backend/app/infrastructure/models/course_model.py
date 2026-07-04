@@ -1,60 +1,53 @@
-from sqlalchemy import Column, String, SmallInteger, Boolean, TIMESTAMP, ForeignKey, UniqueConstraint, Table, Time
+from sqlalchemy import (
+    Column, String, SmallInteger, Boolean, TIMESTAMP, Time, ForeignKey,
+    UniqueConstraint, Table,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.infrastructure.database import Base
 
+
+# ── Course dimensions (independently editable/combinable) ────────────────────
+
 class AcademicYearModel(Base):
     __tablename__ = "academic_years"
 
-    id         = Column(SmallInteger, primary_key=True)
-    name       = Column(String(50), nullable=False, unique=True)
+    id         = Column(SmallInteger, primary_key=True, autoincrement=True)
+    name       = Column(String(50), nullable=False, unique=True)   # e.g. '4th Year'
     sort_order = Column(SmallInteger, nullable=False, unique=True)
-
-    courses = relationship("CourseModel", back_populates="academic_year")
 
 
 class DivisionModel(Base):
     __tablename__ = "divisions"
 
-    id   = Column(SmallInteger, primary_key=True)
-    name = Column(String(20), nullable=False, unique=True)
-
-    courses = relationship("CourseModel", back_populates="division")
+    id   = Column(SmallInteger, primary_key=True, autoincrement=True)
+    name = Column(String(20), nullable=False, unique=True)          # e.g. 'A', 'B'
 
 
 class SpecialtyModel(Base):
     __tablename__ = "specialties"
 
-    id   = Column(SmallInteger, primary_key=True)
+    id   = Column(SmallInteger, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False, unique=True)
-
-    courses = relationship("CourseModel", back_populates="specialty")
 
 
 class ShiftModel(Base):
     __tablename__ = "shifts"
 
-    id         = Column(SmallInteger, primary_key=True)
-    name       = Column(String(50), nullable=False, unique=True)
+    id         = Column(SmallInteger, primary_key=True, autoincrement=True)
+    name       = Column(String(50), nullable=False, unique=True)    # 'Morning'...
     start_time = Column(Time, nullable=False)
     end_time   = Column(Time, nullable=False)
-
-    courses = relationship("CourseModel", back_populates="shift")
 
 
 class WorkshopGroupModel(Base):
     __tablename__ = "workshop_groups"
 
-    id   = Column(SmallInteger, primary_key=True)
+    id   = Column(SmallInteger, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False, unique=True)
 
-    courses = relationship(
-        "CourseModel",
-        secondary="course_workshop_groups",
-        back_populates="workshop_groups"
-    )
 
-
+# A course links to zero or more workshop groups (N:M).
 course_workshop_groups = Table(
     "course_workshop_groups",
     Base.metadata,
@@ -62,6 +55,8 @@ course_workshop_groups = Table(
     Column("workshop_group_id", SmallInteger, ForeignKey("workshop_groups.id", ondelete="CASCADE"), primary_key=True),
 )
 
+
+# ── Course (combination of the four dimensions above) ────────────────────────
 
 class CourseModel(Base):
     __tablename__ = "courses"
@@ -74,15 +69,14 @@ class CourseModel(Base):
     is_active        = Column(Boolean, nullable=False, default=True)
     created_at       = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
-    academic_year   = relationship("AcademicYearModel", back_populates="courses", lazy="joined")
-    division        = relationship("DivisionModel", back_populates="courses", lazy="joined")
-    specialty       = relationship("SpecialtyModel", back_populates="courses", lazy="joined")
-    shift           = relationship("ShiftModel", back_populates="courses", lazy="joined")
+    academic_year = relationship("AcademicYearModel", lazy="joined")
+    division      = relationship("DivisionModel", lazy="joined")
+    specialty     = relationship("SpecialtyModel", lazy="joined")
+    shift         = relationship("ShiftModel", lazy="joined")
     workshop_groups = relationship(
         "WorkshopGroupModel",
         secondary=course_workshop_groups,
-        back_populates="courses",
-        lazy="joined"
+        lazy="joined",
     )
 
     __table_args__ = (

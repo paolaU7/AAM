@@ -2,6 +2,7 @@ from typing import List, Optional
 from app.domain.entities.course import Course
 from app.domain.repositories.course_repository import CourseRepository
 
+
 class GetCourses:
     def __init__(self, repo: CourseRepository):
         self.repo = repo

@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../widgets/aam_design_system.dart';
 import '../screens/dashboard_screen.dart';
-import '../screens/alumnos_screen.dart';
-import '../screens/asistencia_screen.dart';
-import '../screens/horarios_screen.dart';
-import '../screens/usuarios_screen.dart';
-import '../screens/reportes_screen.dart';
+import '../screens/students_screen.dart';
+import '../screens/attendance_screen.dart';
+import '../screens/schedules_screen.dart';
+import '../screens/users_screen.dart';
+import '../screens/reports_screen.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
