@@ -1,0 +1,49 @@
+
+=== subjects ===
+  id: uuid
+  name: text
+  created_at: timestamp with time zone
+
+=== teachers ===
+  id: uuid
+  full_name: text
+  email: text
+  phone: text
+  created_at: timestamp with time zone
+
+=== course_subject_teachers ===
+  course_id: uuid
+  subject_id: uuid
+  teacher_id: uuid
+
+=== class_periods ===
+  id: uuid
+  course_id: uuid
+  day_of_week: smallint
+  shift: USER-DEFINED
+  period_order: smallint
+  period_type: USER-DEFINED
+  subject_id: uuid
+  teacher_id: uuid
+  start_time: time without time zone
+  end_time: time without time zone
+  is_fifth_module: boolean
+
+=== course_preceptors ===
+  course_id: uuid
+  shift: USER-DEFINED
+  preceptor_id: uuid
+
+=== course_preceptor_temp_assignments ===
+  id: uuid
+  course_id: uuid
+  shift: USER-DEFINED
+  preceptor_id: uuid
+  start_date: date
+  end_date: date
+  reason: text
+  created_by: uuid
+  created_at: timestamp with time zone
+
+ENUMS: ['activity_type', 'attendance_source', 'attendance_status', 'period_type', 'shift_type', 'user_role']
+old preceptor_courses still exists: True

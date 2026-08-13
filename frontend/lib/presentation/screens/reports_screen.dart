@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../domain/entities/course.dart';
+import '../../infrastructure/datasources/api_datasource.dart';
 import '../widgets/aam_design_system.dart';
 
 class ReportesScreen extends StatefulWidget {
@@ -10,6 +12,24 @@ class ReportesScreen extends StatefulWidget {
 }
 
 class _ReportesScreenState extends State<ReportesScreen> {
+  final ApiDatasource _ds = ApiDatasource();
+  List<Course> _cursos = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarCursos();
+  }
+
+  Future<void> _cargarCursos() async {
+    try {
+      final cursos = await _ds.getCursos();
+      if (mounted) setState(() => _cursos = cursos);
+    } catch (_) {
+      // filtro opcional; el resto de la pantalla funciona sin él
+    }
+  }
+
   static const List<_ReporteConfig> _reportes = [
     _ReporteConfig(icon: Icons.calendar_today_outlined,  color: AAMColors.primary,       titulo: 'Asistencia diaria',    descripcion: 'Presentes, ausentes y tardanzas del día seleccionado.',          badge: 'PDF / Excel'),
     _ReporteConfig(icon: Icons.bar_chart_outlined,       color: AAMColors.accent,        titulo: 'Resumen mensual',      descripcion: 'Porcentaje por curso y turno. Comparativo mes a mes.',             badge: 'Excel'),
@@ -76,9 +96,13 @@ class _ReportesScreenState extends State<ReportesScreen> {
           spacing: 12, runSpacing: 12,
           crossAxisAlignment: WrapCrossAlignment.end,
           children: [
-            _FilterField(label: 'Desde', hint: '01/06/2026', theme: theme),
-            _FilterField(label: 'Hasta', hint: '30/06/2026', theme: theme),
-            _FilterDropdown(label: 'Curso', items: const ['Todos', '4° 2°', '3° 1°', '5° 3°'], theme: theme),
+            _FilterField(label: 'Desde', hint: 'dd/mm/aaaa', theme: theme),
+            _FilterField(label: 'Hasta', hint: 'dd/mm/aaaa', theme: theme),
+            _FilterDropdown(
+              label: 'Curso',
+              items: ['Todos', ..._cursos.map((c) => c.name)],
+              theme: theme,
+            ),
             _FilterDropdown(label: 'Turno', items: const ['Todos', 'Mañana', 'Tarde', 'Vespertino'], theme: theme),
             const AAMButton(label: 'Generar Excel', icon: Icons.download_outlined),
             const AAMButton(label: 'Generar PDF',   icon: Icons.picture_as_pdf_outlined, outlined: true),

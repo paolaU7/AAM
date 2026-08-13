@@ -1,20 +1,18 @@
-from dataclasses import dataclass, field
-from typing import List
+from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
 class Course:
-    """Domain entity: a course is the combination of the four independent
-    dimensions (academic year + division + specialty + shift). Workshop groups
-    are a separate N:M relation. `name`/`horario` are display helpers built by
-    the repository."""
+    """Domain entity: a course is the combination of three independent
+    numeric dimensions (academic_year, grade_year, division). `specialty` is
+    a nullable course-level attribute. `name`/`total_students` are display
+    helpers computed by the repository, not stored columns."""
 
     id: str
-    academic_year: str          # academic year name, e.g. "4th Year"
-    division: str               # "A", "B", "C"...
-    specialty: str
-    shift: str                  # "Morning" | "Afternoon" | "Evening"
-    total_students: int
+    academic_year: int
+    grade_year: int
+    division: int
+    specialty: Optional[str] = None
+    total_students: int = 0
     name: str = ""
-    horario: str = ""
-    workshop_groups: List[str] = field(default_factory=list)

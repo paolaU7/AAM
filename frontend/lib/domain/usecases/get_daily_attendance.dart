@@ -20,12 +20,14 @@ class RegisterManualCheckIn {
   Future<AttendanceRecord> call({
     required String studentId,
     required String courseId,
-    required DateTime checkInTime,
+    required DateTime entryTimestamp,
+    required AttendanceStatus status,
   }) {
     return repository.registerManualCheckIn(
-      studentId:   studentId,
-      courseId:    courseId,
-      checkInTime: checkInTime,
+      studentId: studentId,
+      courseId: courseId,
+      entryTimestamp: entryTimestamp,
+      status: status,
     );
   }
 }
@@ -38,11 +40,13 @@ class RegisterEarlyDeparture {
     required String recordId,
     required DateTime departureTime,
     required String reason,
+    required String registeredByUserId,
   }) {
     return repository.registerEarlyDeparture(
-      recordId:      recordId,
+      recordId: recordId,
       departureTime: departureTime,
-      reason:        reason,
+      reason: reason,
+      registeredByUserId: registeredByUserId,
     );
   }
 }

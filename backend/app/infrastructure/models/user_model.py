@@ -8,7 +8,7 @@ from app.infrastructure.database import Base
 
 
 class UserRoleEnum(enum.Enum):
-    direction = "direction"   # dirección — full access
+    principal = "principal"   # dirección — full access
     preceptor = "preceptor"   # assigned courses only
 
 
@@ -16,7 +16,7 @@ class UserModel(Base):
     __tablename__ = "users"
 
     id            = Column(String(36), primary_key=True, server_default=func.gen_random_uuid())
-    username      = Column(String(50), nullable=False, unique=True)   # e.g. 'abc.123'
+    email         = Column(String(255), nullable=False, unique=True)
     password_hash = Column(Text, nullable=False)
     full_name     = Column(String(150), nullable=False)
     role          = Column(Enum(UserRoleEnum, name="user_role"), nullable=False)
@@ -25,13 +25,12 @@ class UserModel(Base):
     created_at    = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at    = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
-    course_assignments = relationship(
-        "PreceptorCourseAssignmentModel",
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
 
-
+# NOTE: the real DB has `preceptor_courses` + `preceptor_favorites` as two
+# separate bridge tables (matching DATABASE_SCHEMA.md), not a single
+# `preceptor_course_assignments` with an `is_favorite` flag. This model still
+# points at the old, nonexistent table — dormant/unused (nothing queries it),
+# left as known follow-up work, out of scope for the Users CRUD pass.
 class PreceptorCourseAssignmentModel(Base):
     __tablename__ = "preceptor_course_assignments"
 
@@ -40,7 +39,6 @@ class PreceptorCourseAssignmentModel(Base):
     is_favorite = Column(Boolean, nullable=False, default=False)
     assigned_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
-    user   = relationship("UserModel", back_populates="course_assignments")
     course = relationship("CourseModel", lazy="joined")
 
 

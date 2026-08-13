@@ -5,30 +5,18 @@ class CreateUser {
   const CreateUser(this.repository);
   final UserRepository repository;
 
-  Future<User> call({
+  Future<CreatedUser> call({
     required String firstName,
     required String lastName,
     required UserRole role,
-    String? shift,
   }) async {
-    // Domain validation: preceptor requires an assigned shift
-    if (role == UserRole.preceptor && (shift == null || shift.isEmpty)) {
-      throw const CreateUserException('A preceptor must have an assigned shift.');
+    final f = firstName.trim();
+    final l = lastName.trim();
+    if (f.isEmpty || l.isEmpty) {
+      throw const CreateUserException('Completá nombre y apellido.');
     }
 
-    final username = User.generateUsername(lastName, firstName);
-
-    final user = User(
-      id:        '',   // ULID assigned by the backend
-      firstName: firstName,
-      lastName:  lastName,
-      username:  username,
-      role:      role,
-      shift:     shift,
-      isActive:  true,
-    );
-
-    return repository.createUser(user);
+    return repository.createUser(firstName: f, lastName: l, role: role);
   }
 }
 

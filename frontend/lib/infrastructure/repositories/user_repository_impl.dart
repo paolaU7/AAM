@@ -1,53 +1,35 @@
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/user_repository.dart';
-import '../datasources/mock_datasource.dart';
+import '../datasources/api_datasource.dart';
 
 class UserRepositoryImpl implements UserRepository {
   UserRepositoryImpl(this._datasource);
-  final MockDatasource _datasource;
-
-  // Local mutable state for the mock (simulates an in-memory database)
-  late List<User> _cache = _datasource.getUsuarios();
+  final ApiDatasource _datasource;
 
   @override
-  Future<List<User>> getUsers() async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    return List.unmodifiable(_cache);
-  }
+  Future<List<User>> getUsers() => _datasource.getUsers();
 
   @override
   Future<User?> getUserById(String id) async {
-    await Future.delayed(const Duration(milliseconds: 100));
+    final users = await getUsers();
     try {
-      return _cache.firstWhere((u) => u.id == id);
+      return users.firstWhere((u) => u.id == id);
     } catch (_) {
       return null;
     }
   }
 
   @override
-  Future<User> createUser(User user) async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    final newUser = user.copyWith(
-      id: 'u${(_cache.length + 1).toString().padLeft(3, '0')}',
-    );
-    _cache = [..._cache, newUser];
-    return newUser;
-  }
+  Future<CreatedUser> createUser({
+    required String firstName,
+    required String lastName,
+    required UserRole role,
+  }) =>
+      _datasource.crearUsuario(firstName: firstName, lastName: lastName, role: role);
 
   @override
-  Future<User> toggleActive(String userId) async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    _cache = _cache.map((u) {
-      if (u.id == userId) return u.copyWith(isActive: !u.isActive);
-      return u;
-    }).toList();
-    return _cache.firstWhere((u) => u.id == userId);
-  }
+  Future<User> toggleActive(String userId) => _datasource.toggleUserActive(userId);
 
   @override
-  Future<void> resetPassword(String userId) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    // Mock: does nothing real. With API: POST /users/{id}/reset-password
-  }
+  Future<String> resetPassword(String userId) => _datasource.resetUserPassword(userId);
 }

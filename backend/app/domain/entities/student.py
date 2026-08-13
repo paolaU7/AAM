@@ -15,10 +15,10 @@ class Alumno:
     dni: str
     curso_id: str
     curso: str
-    especialidad: str
-    turno: str
     recursante: bool
     porcentaje_asistencia: float
+    workshop_group_id: Optional[str] = None
+    taller: Optional[str] = None  # group_label legible, si tiene grupo asignado
 
     @property
     def nombre_completo(self) -> str:

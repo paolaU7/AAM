@@ -1,10 +1,9 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 import re
 
 class RolUsuario(str, Enum):
-    direccion = "direccion"
+    principal = "principal"
     preceptor = "preceptor"
 
 @dataclass(frozen=True)
@@ -12,14 +11,17 @@ class Usuario:
     id: str
     nombre: str
     apellido: str
-    username: str
+    email: str
     rol: RolUsuario
     activo: bool
-    turno: Optional[str] = None
 
     @property
     def nombre_completo(self) -> str:
         return f"{self.apellido}, {self.nombre}"
+
+    @property
+    def username(self) -> str:
+        return Usuario.generar_username(self.apellido, self.nombre)
 
     @staticmethod
     def generar_username(apellido: str, nombre: str) -> str:

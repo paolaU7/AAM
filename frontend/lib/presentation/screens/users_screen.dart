@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/usecases/create_user.dart';
-import '../../infrastructure/datasources/mock_datasource.dart';
+import '../../infrastructure/datasources/api_datasource.dart';
 import '../../infrastructure/repositories/user_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
 
@@ -21,7 +21,7 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
   @override
   void initState() {
     super.initState();
-    _repo         = UserRepositoryImpl(MockDatasource());
+    _repo         = UserRepositoryImpl(ApiDatasource());
     _crearUsuario = CreateUser(_repo);
     _future       = _repo.getUsers();
   }
@@ -29,20 +29,27 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
   void _refresh() => setState(() => _future = _repo.getUsers());
 
   void _abrirModal() {
-    showDialog(
+    showDialog<CreatedUser>(
       context: context,
       barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
       builder: (_) => _NuevoUsuarioModal(
-        onCreate: (firstName, lastName, role, shift) async {
-          await _crearUsuario(
-            firstName: firstName,
-            lastName:  lastName,
-            role:      role,
-            shift:     shift,
-          );
-          _refresh();
-        },
+        onCreate: (firstName, lastName, role) => _crearUsuario(
+          firstName: firstName,
+          lastName:  lastName,
+          role:      role,
+        ),
       ),
+    ).then((created) {
+      _refresh();
+      if (created != null) _mostrarPasswordGenerada(created);
+    });
+  }
+
+  void _mostrarPasswordGenerada(CreatedUser created) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
+      builder: (_) => _PasswordGeneradaModal(usuario: created.user, password: created.temporaryPassword),
     );
   }
 
@@ -130,7 +137,7 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
           ('Nombre',  2),
           ('Usuario', 2),
           ('Rol',     2),
-          ('Turno',   2),
+          ('Email',   2),
           ('Estado',  2),
           ('',        1),
         ]),
@@ -181,7 +188,7 @@ class _UsuarioRowState extends State<_UsuarioRow> {
   @override
   Widget build(BuildContext context) {
     final u = widget.usuario;
-    final isDireccion = u.role == UserRole.direction;
+    final isDireccion = u.role == UserRole.principal;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -219,7 +226,7 @@ class _UsuarioRowState extends State<_UsuarioRow> {
             label: u.role.label,
             color: isDireccion ? AAMColors.primary : AAMColors.accent,
           )),
-          Expanded(flex: 2, child: Text(u.shift ?? '—',
+          Expanded(flex: 2, child: Text(u.email,
             style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
           Expanded(flex: 2, child: AAMBadge(
             label: u.isActive ? 'Activo' : 'Inactivo',
@@ -239,7 +246,7 @@ class _UsuarioRowState extends State<_UsuarioRow> {
 // ─── Modal nuevo usuario ───────────────────────────────────────────────────────
 class _NuevoUsuarioModal extends StatefulWidget {
   const _NuevoUsuarioModal({required this.onCreate});
-  final Future<void> Function(String nombre, String apellido, UserRole rol, String? turno) onCreate;
+  final Future<CreatedUser> Function(String nombre, String apellido, UserRole rol) onCreate;
 
   @override
   State<_NuevoUsuarioModal> createState() => _NuevoUsuarioModalState();
@@ -249,7 +256,6 @@ class _NuevoUsuarioModalState extends State<_NuevoUsuarioModal> {
   final _nombreCtrl   = TextEditingController();
   final _apellidoCtrl = TextEditingController();
   UserRole _rol  = UserRole.preceptor;
-  String _turno    = 'Turno Mañana';
   bool _loading    = false;
   String? _error;
 
@@ -272,13 +278,12 @@ class _NuevoUsuarioModalState extends State<_NuevoUsuarioModal> {
     }
     setState(() { _loading = true; _error = null; });
     try {
-      await widget.onCreate(
+      final created = await widget.onCreate(
         _nombreCtrl.text.trim(),
         _apellidoCtrl.text.trim(),
         _rol,
-        _rol == UserRole.preceptor ? _turno : null,
       );
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) Navigator.of(context).pop(created);
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -345,19 +350,6 @@ class _NuevoUsuarioModalState extends State<_NuevoUsuarioModal> {
             onChanged: (v) => setState(() => _rol = v ?? _rol),
           ),
           const SizedBox(height: 14),
-
-          // Turno (solo si es preceptor)
-          if (_rol == UserRole.preceptor) ...[
-            _label('Turno'),
-            const SizedBox(height: 6),
-            _dropdown<String>(
-              value: _turno,
-              items: const ['Turno Mañana', 'Turno Tarde', 'Turno Vespertino'],
-              labelOf: (s) => s,
-              onChanged: (v) => setState(() => _turno = v ?? _turno),
-            ),
-            const SizedBox(height: 14),
-          ],
 
           // Preview usuario generado
           if (_usernamePreview.isNotEmpty) ...[
@@ -482,6 +474,74 @@ class _NuevoUsuarioModalState extends State<_NuevoUsuarioModal> {
         style: GoogleFonts.dmSans(fontSize: 14, color: AAMColors.primary),
         items: items.map((i) => DropdownMenuItem(value: i, child: Text(labelOf(i)))).toList(),
         onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+// ─── Contraseña generada (se muestra una única vez) ────────────────────────────
+class _PasswordGeneradaModal extends StatelessWidget {
+  const _PasswordGeneradaModal({required this.usuario, required this.password});
+  final User usuario;
+  final String password;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: 420,
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          color: AAMColors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withAlpha((0.12 * 255).round()), blurRadius: 32, offset: const Offset(0, 8)),
+          ],
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(color: AAMColors.success, borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.check, size: 18, color: AAMColors.white),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text('Usuario creado',
+              style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w700, color: AAMColors.primary))),
+          ]),
+          const SizedBox(height: 20),
+          Text('${usuario.fullName} (${usuario.email})',
+            style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.textSec)),
+          const SizedBox(height: 16),
+          Text('Contraseña inicial — anotala ahora, no se puede volver a ver:',
+            style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: AAMColors.textSec)),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AAMColors.surface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AAMColors.accent.withAlpha((0.4 * 255).round())),
+            ),
+            child: Text(password,
+              style: const TextStyle(fontSize: 16, fontFamily: 'monospace', fontWeight: FontWeight.w700, color: AAMColors.primary)),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(color: AAMColors.accent, borderRadius: BorderRadius.circular(10)),
+                child: Center(child: Text('Listo',
+                  style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600, color: AAMColors.white))),
+              ),
+            ),
+          ),
+        ]),
       ),
     );
   }

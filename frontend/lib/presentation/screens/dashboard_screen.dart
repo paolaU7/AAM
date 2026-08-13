@@ -240,14 +240,10 @@ class _DashboardContent extends StatelessWidget {
   }
 
   Widget _buildAlertsCard(AAMTheme theme) {
-    // Alertas estáticas — en producción vendrían de un AlertasRepository
-    final alertas = [
-      (Icons.warning_amber_outlined, AAMColors.danger,     'González, Lucas A.',  '3° ausencia consecutiva · 5° 3°', '08:42'),
-      (Icons.exit_to_app_outlined,   AAMColors.warning,    'Ferreyra, Ana P.',    'Retiro anticipado pendiente · 4° 2°', '09:15'),
-      (Icons.info_outline,           AAMColors.accent,     'Romero, Diego E.',    'Falta no computable · recursante', 'ayer'),
-      (Icons.person_off_outlined,    AAMColors.danger,     'Torres, Valentina',   'Ausente sin justificar · 3° 2°', '07:58'),
-    ];
-
+    // No hay un concepto de "alerta" en el schema ni un endpoint que las
+    // calcule todavía (requeriría agregaciones sobre attendance_records:
+    // ausencias consecutivas, retiros pendientes, etc.) — placeholder
+    // honesto en vez de datos inventados.
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -261,40 +257,19 @@ class _DashboardContent extends StatelessWidget {
           Text('Alertas recientes',
             style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w700, color: theme.text)),
           const SizedBox(height: 16),
-          ...alertas.map((a) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(children: [
-              Container(
-                width: 36, height: 36,
-                decoration: BoxDecoration(
-                  color: a.$2.withAlpha((0.12 * 255).round()),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(a.$1, size: 18, color: a.$2),
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(a.$3, style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: theme.text)),
-                  Text(a.$4, style: GoogleFonts.dmSans(fontSize: 11, color: theme.textSec)),
-                ],
-              )),
-              Text(a.$5, style: GoogleFonts.dmSans(fontSize: 11, color: theme.textSec)),
-            ]),
-          )),
+          _CardEmptyState(
+            icon: Icons.notifications_none_outlined,
+            message: 'Todavía no hay un cálculo de alertas disponible.',
+            theme: theme,
+          ),
         ],
       ),
     );
   }
 
   Widget _buildDevicesCard(AAMTheme theme) {
-    final dispositivos = [
-      ('Lector — Entrada Principal', true),
-      ('Lector — Puerta Lateral',    true),
-      ('Lector — Taller 3',          false),
-    ];
-
+    // `devices` existe en la DB pero no hay endpoint que exponga su estado
+    // (online/offline) todavía — placeholder honesto en vez de datos inventados.
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -312,27 +287,33 @@ class _DashboardContent extends StatelessWidget {
               style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w700, color: theme.text)),
           ]),
           const SizedBox(height: 16),
-          ...dispositivos.map((d) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(children: [
-              Container(
-                    width: 8, height: 8,
-                    decoration: BoxDecoration(
-                      color: d.$2 ? AAMColors.success : AAMColors.danger,
-                      shape: BoxShape.circle,
-                    ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(child: Text(d.$1,
-                style: GoogleFonts.dmSans(fontSize: 13, color: theme.text))),
-              AAMBadge(
-                label: d.$2 ? 'Online' : 'Offline',
-                color: d.$2 ? AAMColors.success : AAMColors.highlight,
-              ),
-            ]),
-          )),
+          _CardEmptyState(
+            icon: Icons.nfc_outlined,
+            message: 'Todavía no hay un endpoint que exponga el estado de los lectores.',
+            theme: theme,
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _CardEmptyState extends StatelessWidget {
+  const _CardEmptyState({required this.icon, required this.message, required this.theme});
+  final IconData icon;
+  final String message;
+  final AAMTheme theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(children: [
+        Icon(icon, size: 18, color: theme.textSec),
+        const SizedBox(width: 10),
+        Expanded(child: Text(message,
+          style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec))),
+      ]),
     );
   }
 }

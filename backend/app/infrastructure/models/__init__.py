@@ -2,33 +2,39 @@
 relationships resolve regardless of which routers are loaded."""
 
 from app.infrastructure.models.course_model import (
-    AcademicYearModel, DivisionModel, SpecialtyModel, ShiftModel,
-    WorkshopGroupModel, CourseModel, course_workshop_groups,
+    CourseModel, WorkshopGroupModel,
 )
 from app.infrastructure.models.student_model import (
-    StudentModel, StudentCourseEnrollmentModel, RepeatingSubjectModel,
-    EnrollmentTypeEnum, student_workshop_groups,
+    StudentModel,
 )
 from app.infrastructure.models.user_model import (
     UserModel, PreceptorCourseAssignmentModel, DeviceModel, UserRoleEnum,
 )
 from app.infrastructure.models.schedule_model import (
-    ScheduleSlotModel, ScheduleExceptionModel,
-    ActivityTypeEnum, ExceptionScopeEnum,
+    TimeSlotModel, ScheduleExceptionModel,
+    ShiftTypeEnum, ActivityTypeEnum,
+)
+from app.infrastructure.models.academic_model import (
+    SubjectModel, TeacherModel, CourseSubjectTeacherModel, ClassPeriodModel,
+    PeriodTypeEnum,
+)
+from app.infrastructure.models.preceptor_model import (
+    CoursePreceptorModel, CoursePreceptorTempAssignmentModel,
 )
 from app.infrastructure.models.attendance_model import (
-    AttendanceRecordModel, EarlyDepartureModel, NonComputableAbsenceModel,
-    AttendanceStatusEnum, AttendanceSourceEnum, NonComputableReasonEnum,
+    AttendanceRecordModel, EarlyDepartureModel,
+    AttendanceStatusEnum, AttendanceSourceEnum,
 )
 
 __all__ = [
-    "AcademicYearModel", "DivisionModel", "SpecialtyModel", "ShiftModel",
-    "WorkshopGroupModel", "CourseModel", "course_workshop_groups",
-    "StudentModel", "StudentCourseEnrollmentModel", "RepeatingSubjectModel",
-    "EnrollmentTypeEnum", "student_workshop_groups",
+    "CourseModel", "WorkshopGroupModel",
+    "StudentModel",
     "UserModel", "PreceptorCourseAssignmentModel", "DeviceModel", "UserRoleEnum",
-    "ScheduleSlotModel", "ScheduleExceptionModel",
-    "ActivityTypeEnum", "ExceptionScopeEnum",
-    "AttendanceRecordModel", "EarlyDepartureModel", "NonComputableAbsenceModel",
-    "AttendanceStatusEnum", "AttendanceSourceEnum", "NonComputableReasonEnum",
+    "TimeSlotModel", "ScheduleExceptionModel",
+    "ShiftTypeEnum", "ActivityTypeEnum",
+    "SubjectModel", "TeacherModel", "CourseSubjectTeacherModel", "ClassPeriodModel",
+    "PeriodTypeEnum",
+    "CoursePreceptorModel", "CoursePreceptorTempAssignmentModel",
+    "AttendanceRecordModel", "EarlyDepartureModel",
+    "AttendanceStatusEnum", "AttendanceSourceEnum",
 ]

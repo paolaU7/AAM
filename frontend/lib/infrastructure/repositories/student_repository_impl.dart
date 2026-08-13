@@ -1,4 +1,6 @@
 import '../../domain/entities/student.dart';
+import '../../domain/entities/course.dart';
+import '../../domain/entities/workshop_group.dart';
 import '../../domain/repositories/student_repository.dart';
 import '../datasources/api_datasource.dart';
 
@@ -36,8 +38,28 @@ class StudentRepositoryImpl implements StudentRepository {
   }
 
   @override
-  Future<Student> crearAlumno(Student alumno) async => alumno;
+  Future<List<Course>> getCourses() => _datasource.getCursos();
 
   @override
-  Future<Student> actualizarAlumno(Student alumno) async => alumno;
+  Future<List<WorkshopGroup>> getWorkshopGroupsByCourse(String courseId) =>
+      _datasource.getWorkshopGroupsByCourse(courseId);
+
+  @override
+  Future<Student> crearAlumno({
+    required String firstName,
+    required String lastName,
+    required String nationalId,
+    required String courseId,
+    String? workshopGroupId,
+  }) =>
+      _datasource.crearAlumno(
+        firstName: firstName,
+        lastName: lastName,
+        nationalId: nationalId,
+        courseId: courseId,
+        workshopGroupId: workshopGroupId,
+      );
+
+  @override
+  Future<Student> actualizarAlumno(Student alumno) => _datasource.actualizarAlumno(alumno);
 }

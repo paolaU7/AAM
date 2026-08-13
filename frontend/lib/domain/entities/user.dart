@@ -5,22 +5,22 @@ class User {
     required this.firstName,
     required this.lastName,
     required this.username,
+    required this.email,
     required this.role,
-    required this.shift,
     required this.isActive,
   });
 
   final String id;
   final String firstName;
   final String lastName;
-  final String username; // auto-generated, format abc.xxx
+  final String username; // display alias, derived from the name (abc.xyz)
+  final String email;
   final UserRole role;
-  final String? shift;  // PRECEPTOR only
   final bool isActive;
 
   String get fullName => '$lastName, $firstName';
 
-  /// Generates an automatic username from the full name
+  /// Generates the display username from the full name.
   /// Ex: "Rodríguez, María" → "rod.mar"
   static String generateUsername(String lastName, String firstName) {
     String clean(String s) => s
@@ -45,8 +45,8 @@ class User {
     String? firstName,
     String? lastName,
     String? username,
+    String? email,
     UserRole? role,
-    String? shift,
     bool? isActive,
   }) {
     return User(
@@ -54,19 +54,27 @@ class User {
       firstName: firstName ?? this.firstName,
       lastName:  lastName  ?? this.lastName,
       username:  username  ?? this.username,
+      email:     email     ?? this.email,
       role:      role      ?? this.role,
-      shift:     shift     ?? this.shift,
       isActive:  isActive  ?? this.isActive,
     );
   }
 }
 
-enum UserRole { direction, preceptor }
+/// Result of creating a user: the temporary password is only ever exposed
+/// this once — the backend never lets you read it back afterward.
+class CreatedUser {
+  const CreatedUser({required this.user, required this.temporaryPassword});
+  final User user;
+  final String temporaryPassword;
+}
+
+enum UserRole { principal, preceptor }
 
 extension UserRoleLabel on UserRole {
   String get label {
     switch (this) {
-      case UserRole.direction:  return 'DIRECCIÓN';
+      case UserRole.principal:  return 'DIRECCIÓN';
       case UserRole.preceptor:  return 'PRECEPTOR';
     }
   }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../domain/entities/course.dart';
+import '../../domain/entities/student.dart';
+import '../../domain/entities/user.dart';
 import '../../domain/entities/attendance_record.dart';
 import '../../domain/usecases/get_daily_attendance.dart';
 import '../../infrastructure/datasources/api_datasource.dart';
@@ -16,6 +18,7 @@ class AsistenciaScreen extends StatefulWidget {
 }
 
 class _AsistenciaScreenState extends State<AsistenciaScreen> {
+  late final ApiDatasource _ds;
   late final GetDailyAttendance _getAsistencia;
   late final CourseRepositoryImpl _cursoRepo;
   late final AttendanceRepositoryImpl _asistenciaRepo;
@@ -28,10 +31,10 @@ class _AsistenciaScreenState extends State<AsistenciaScreen> {
   @override
   void initState() {
     super.initState();
-    final ds = ApiDatasource();
-    _asistenciaRepo = AttendanceRepositoryImpl(ds);
+    _ds = ApiDatasource();
+    _asistenciaRepo = AttendanceRepositoryImpl(_ds);
     _getAsistencia  = GetDailyAttendance(_asistenciaRepo);
-    _cursoRepo      = CourseRepositoryImpl(ds);
+    _cursoRepo      = CourseRepositoryImpl(_ds);
     _loadData();
   }
 
@@ -74,11 +77,13 @@ class _AsistenciaScreenState extends State<AsistenciaScreen> {
       builder: (_) => _IngresoManualModal(
         curso: _cursoSeleccionado!,
         fecha: _fecha,
-        onConfirm: (alumnoNombre, hora) async {
+        datasource: _ds,
+        onConfirm: (studentId, entryTimestamp, status) async {
           await _asistenciaRepo.registerManualCheckIn(
-            studentId:   'manual_${DateTime.now().millisecondsSinceEpoch}',
-            courseId:    _cursoSeleccionado!.id,
-            checkInTime: hora,
+            studentId:      studentId,
+            courseId:       _cursoSeleccionado!.id,
+            entryTimestamp: entryTimestamp,
+            status:         status,
           );
           setState(_loadData);
         },
@@ -92,11 +97,13 @@ class _AsistenciaScreenState extends State<AsistenciaScreen> {
       barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
       builder: (_) => _RetiroAnticipadoModal(
         registro: registro,
-        onConfirm: (motivo) async {
+        datasource: _ds,
+        onConfirm: (motivo, registradoPor) async {
           await _asistenciaRepo.registerEarlyDeparture(
-            recordId:      registro.id,
-            departureTime: DateTime.now(),
-            reason:        motivo,
+            recordId:            registro.id,
+            departureTime:       DateTime.now(),
+            reason:              motivo,
+            registeredByUserId:  registradoPor,
           );
           setState(_loadData);
         },
@@ -110,11 +117,8 @@ class _AsistenciaScreenState extends State<AsistenciaScreen> {
       barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
       builder: (_) => _NoComputableModal(
         registro: registro,
-        onConfirm: (motivo) async {
-          await _asistenciaRepo.markNonComputable(
-            recordId: registro.id,
-            reason:   motivo,
-          );
+        onConfirm: () async {
+          await _asistenciaRepo.markNonComputable(registro.id);
           setState(_loadData);
         },
       ),
@@ -234,18 +238,19 @@ class _AsistenciaScreenState extends State<AsistenciaScreen> {
 
   Widget _buildMiniStats(List<AttendanceRecord> registros) {
     int count(AttendanceStatus e) => registros.where((r) => r.status == e).length;
+    final ausentes = count(AttendanceStatus.absent) + count(AttendanceStatus.absentWithPresence);
     final retiros = registros.where((r) => r.hasEarlyDeparture).length;
 
     return Row(children: [
-      _MiniStat(label: 'Presentes',      value: '${count(AttendanceStatus.present)}',      color: AAMColors.success),
+      _MiniStat(label: 'Presentes',      value: '${count(AttendanceStatus.present)}', color: AAMColors.success),
       const SizedBox(width: 12),
-      _MiniStat(label: 'Ausentes',       value: '${count(AttendanceStatus.absent)}',       color: AAMColors.danger),
+      _MiniStat(label: 'Ausentes',       value: '$ausentes',                          color: AAMColors.danger),
       const SizedBox(width: 12),
-      _MiniStat(label: 'Tardanzas',      value: '${count(AttendanceStatus.late)}',         color: AAMColors.warning),
+      _MiniStat(label: 'Tardanzas',      value: '${count(AttendanceStatus.late)}',    color: AAMColors.warning),
       const SizedBox(width: 12),
-      _MiniStat(label: 'No computables', value: '${count(AttendanceStatus.nonComputable)}', color: AAMColors.accent),
+      _MiniStat(label: 'No computables', value: '${count(AttendanceStatus.nonComputableAbsence)}', color: AAMColors.accent),
       const SizedBox(width: 12),
-      _MiniStat(label: 'Retiros',        value: '$retiros',                                color: AAMColors.primary),
+      _MiniStat(label: 'Retiros',        value: '$retiros', color: AAMColors.primary),
     ]);
   }
 
@@ -348,10 +353,11 @@ class _RegistroRowState extends State<_RegistroRow> {
   }
 
   (String, Color) get _estadoBadge => switch (widget.registro.status) {
-    AttendanceStatus.present       => ('Presente',      AAMColors.success),
-    AttendanceStatus.absent        => ('Ausente',       AAMColors.danger),
-    AttendanceStatus.late          => ('Tardanza',      AAMColors.warning),
-    AttendanceStatus.nonComputable => ('No computable', AAMColors.accent),
+    AttendanceStatus.present              => ('Presente',                 AAMColors.success),
+    AttendanceStatus.absent               => ('Ausente',                  AAMColors.danger),
+    AttendanceStatus.late                 => ('Tardanza',                 AAMColors.warning),
+    AttendanceStatus.absentWithPresence   => ('Ausente con permanencia',  AAMColors.danger),
+    AttendanceStatus.nonComputableAbsence => ('No computable',            AAMColors.accent),
   };
 
   @override
@@ -376,7 +382,7 @@ class _RegistroRowState extends State<_RegistroRow> {
             CircleAvatar(
               radius: 15,
               backgroundColor: AAMColors.mint,
-              child: Text(r.studentName.substring(0, 1),
+              child: Text(r.studentName.isNotEmpty ? r.studentName.substring(0, 1) : '?',
                 style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w700, color: widget.theme.text)),
             ),
             const SizedBox(width: 10),
@@ -391,7 +397,7 @@ class _RegistroRowState extends State<_RegistroRow> {
               style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec)),
           ])),
           // Ingreso
-          Expanded(flex: 2, child: Text(_fmtHora(r.checkInTime),
+          Expanded(flex: 2, child: Text(_fmtHora(r.entryTimestamp),
             style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: widget.theme.text))),
           // Retiro
           Expanded(flex: 2, child: Text(_fmtHora(r.departureTime),
@@ -399,7 +405,7 @@ class _RegistroRowState extends State<_RegistroRow> {
               color: r.hasEarlyDeparture ? AAMColors.warning : widget.theme.textSec))),
           // Motivo
           Expanded(flex: 2, child: Text(
-            r.departureReason ?? r.nonComputableReason ?? '—',
+            r.departureReason ?? '—',
             style: GoogleFonts.dmSans(fontSize: 11, color: widget.theme.textSec),
             overflow: TextOverflow.ellipsis,
           )),
@@ -432,7 +438,6 @@ class _RegistroRowState extends State<_RegistroRow> {
     AttendanceSource.nfc     => Icons.nfc,
     AttendanceSource.qr      => Icons.qr_code,
     AttendanceSource.manual  => Icons.edit_outlined,
-    AttendanceSource.unknown => Icons.remove,
   };
 }
 
@@ -464,23 +469,56 @@ class _ActionBtn extends StatelessWidget {
 
 // ─── Modal: ingreso manual ────────────────────────────────────────────────────
 class _IngresoManualModal extends StatefulWidget {
-  const _IngresoManualModal({required this.curso, required this.fecha, required this.onConfirm});
+  const _IngresoManualModal({
+    required this.curso,
+    required this.fecha,
+    required this.datasource,
+    required this.onConfirm,
+  });
   final Course curso;
   final DateTime fecha;
-  final Future<void> Function(String alumnoNombre, DateTime hora) onConfirm;
+  final ApiDatasource datasource;
+  final Future<void> Function(String studentId, DateTime entryTimestamp, AttendanceStatus status) onConfirm;
 
   @override
   State<_IngresoManualModal> createState() => _IngresoManualModalState();
 }
 
 class _IngresoManualModalState extends State<_IngresoManualModal> {
-  final _nombreCtrl = TextEditingController();
+  List<Student> _alumnos = [];
+  Student? _alumnoSel;
+  AttendanceStatus _estado = AttendanceStatus.present;
   TimeOfDay _hora   = TimeOfDay.now();
+  bool _alumnosLoading = true;
   bool _loading     = false;
   String? _error;
 
+  static const List<AttendanceStatus> _estadosDisponibles = [
+    AttendanceStatus.present,
+    AttendanceStatus.late,
+    AttendanceStatus.absent,
+    AttendanceStatus.absentWithPresence,
+  ];
+
   @override
-  void dispose() { _nombreCtrl.dispose(); super.dispose(); }
+  void initState() {
+    super.initState();
+    _cargarAlumnos();
+  }
+
+  Future<void> _cargarAlumnos() async {
+    setState(() { _alumnosLoading = true; _error = null; });
+    try {
+      final todos = await widget.datasource.getAlumnos();
+      final delCurso = todos.where((a) => a.cursoId == widget.curso.id).toList()
+        ..sort((a, b) => a.apellido.compareTo(b.apellido));
+      if (mounted) setState(() => _alumnos = delCurso);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'No se pudieron cargar los alumnos del curso.');
+    } finally {
+      if (mounted) setState(() => _alumnosLoading = false);
+    }
+  }
 
   Future<void> _pickHora() async {
     final picked = await showTimePicker(context: context, initialTime: _hora);
@@ -488,8 +526,9 @@ class _IngresoManualModalState extends State<_IngresoManualModal> {
   }
 
   Future<void> _submit() async {
-    if (_nombreCtrl.text.isEmpty) {
-      setState(() => _error = 'Ingresá el nombre del alumno.');
+    final alumno = _alumnoSel;
+    if (alumno == null) {
+      setState(() => _error = 'Seleccioná un alumno.');
       return;
     }
     setState(() { _loading = true; _error = null; });
@@ -498,7 +537,7 @@ class _IngresoManualModalState extends State<_IngresoManualModal> {
         widget.fecha.year, widget.fecha.month, widget.fecha.day,
         _hora.hour, _hora.minute,
       );
-      await widget.onConfirm(_nombreCtrl.text.trim(), horaCompleta);
+      await widget.onConfirm(alumno.id, horaCompleta, _estado);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       setState(() => _error = e.toString());
@@ -545,21 +584,42 @@ class _IngresoManualModalState extends State<_IngresoManualModal> {
               ]),
               const SizedBox(height: 24),
 
-              // Nombre alumno
+              // Alumno (del curso seleccionado)
               Text('Alumno', style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: theme.textSec)),
               const SizedBox(height: 6),
-              Container(
-                decoration: BoxDecoration(border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(10)),
-                child: TextField(
-                  controller: _nombreCtrl,
-                  style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
-                  decoration: InputDecoration(
-                    hintText: 'Apellido, Nombre',
-                    hintStyle: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    prefixIcon: Icon(Icons.person_outline, size: 18, color: theme.textSec),
+              _dropdownContainer(
+                theme,
+                enabled: !_alumnosLoading && _alumnos.isNotEmpty,
+                child: DropdownButton<Student>(
+                  value: _alumnoSel,
+                  underline: const SizedBox.shrink(),
+                  isExpanded: true,
+                  hint: Text(
+                    _alumnosLoading
+                        ? 'Cargando...'
+                        : (_alumnos.isEmpty ? 'Sin alumnos en este curso' : 'Seleccionar alumno'),
+                    style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
                   ),
+                  style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
+                  items: _alumnos.map((a) => DropdownMenuItem(value: a, child: Text(a.nombreCompleto))).toList(),
+                  onChanged: (_alumnosLoading || _alumnos.isEmpty) ? null : (v) => setState(() => _alumnoSel = v),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Estado
+              Text('Estado', style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: theme.textSec)),
+              const SizedBox(height: 6),
+              _dropdownContainer(
+                theme,
+                enabled: true,
+                child: DropdownButton<AttendanceStatus>(
+                  value: _estado,
+                  underline: const SizedBox.shrink(),
+                  isExpanded: true,
+                  style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
+                  items: _estadosDisponibles.map((e) => DropdownMenuItem(value: e, child: Text(e.label))).toList(),
+                  onChanged: (v) => setState(() => _estado = v ?? _estado),
                 ),
               ),
               const SizedBox(height: 16),
@@ -594,7 +654,7 @@ class _IngresoManualModalState extends State<_IngresoManualModal> {
                   child: Row(children: [
                     const Icon(Icons.error_outline, size: 14, color: AAMColors.danger),
                     const SizedBox(width: 8),
-                    Text(_error!, style: GoogleFonts.dmSans(fontSize: 12, color: AAMColors.danger)),
+                    Expanded(child: Text(_error!, style: GoogleFonts.dmSans(fontSize: 12, color: AAMColors.danger))),
                   ]),
                 ),
               ],
@@ -627,13 +687,26 @@ class _IngresoManualModalState extends State<_IngresoManualModal> {
       },
     );
   }
+
+  Widget _dropdownContainer(AAMTheme theme, {required bool enabled, required Widget child}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.borderCol),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: child,
+    );
+  }
 }
 
 // ─── Modal: retiro anticipado ─────────────────────────────────────────────────
 class _RetiroAnticipadoModal extends StatefulWidget {
-  const _RetiroAnticipadoModal({required this.registro, required this.onConfirm});
+  const _RetiroAnticipadoModal({required this.registro, required this.datasource, required this.onConfirm});
   final AttendanceRecord registro;
-  final Future<void> Function(String motivo) onConfirm;
+  final ApiDatasource datasource;
+  final Future<void> Function(String motivo, String registradoPorUserId) onConfirm;
 
   @override
   State<_RetiroAnticipadoModal> createState() => _RetiroAnticipadoModalState();
@@ -641,20 +714,46 @@ class _RetiroAnticipadoModal extends StatefulWidget {
 
 class _RetiroAnticipadoModalState extends State<_RetiroAnticipadoModal> {
   final _motivoCtrl = TextEditingController();
+  List<User> _usuarios = [];
+  User? _usuarioSel;
+  bool _usuariosLoading = true;
   bool _loading = false;
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    _cargarUsuarios();
+  }
+
+  @override
   void dispose() { _motivoCtrl.dispose(); super.dispose(); }
+
+  Future<void> _cargarUsuarios() async {
+    setState(() { _usuariosLoading = true; _error = null; });
+    try {
+      final usuarios = await widget.datasource.getUsers();
+      if (mounted) setState(() => _usuarios = usuarios);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'No se pudieron cargar los usuarios.');
+    } finally {
+      if (mounted) setState(() => _usuariosLoading = false);
+    }
+  }
 
   Future<void> _submit() async {
     if (_motivoCtrl.text.isEmpty) {
       setState(() => _error = 'Ingresá el motivo del retiro.');
       return;
     }
+    final registradoPor = _usuarioSel;
+    if (registradoPor == null) {
+      setState(() => _error = 'Seleccioná quién registra el retiro.');
+      return;
+    }
     setState(() { _loading = true; _error = null; });
     try {
-      await widget.onConfirm(_motivoCtrl.text.trim());
+      await widget.onConfirm(_motivoCtrl.text.trim(), registradoPor.id);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       setState(() => _error = e.toString());
@@ -734,6 +833,25 @@ class _RetiroAnticipadoModalState extends State<_RetiroAnticipadoModal> {
               ),
             ),
           ),
+          const SizedBox(height: 16),
+
+          Text('Registrado por', style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: theme.textSec)),
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(10)),
+            child: DropdownButton<User>(
+              value: _usuarioSel,
+              underline: const SizedBox.shrink(),
+              isExpanded: true,
+              hint: Text(_usuariosLoading ? 'Cargando...' : 'Seleccionar preceptor/dirección',
+                style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
+              style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
+              items: _usuarios.map((u) => DropdownMenuItem(value: u, child: Text(u.fullName))).toList(),
+              onChanged: _usuariosLoading ? null : (v) => setState(() => _usuarioSel = v),
+            ),
+          ),
 
           if (_error != null) ...[
             const SizedBox(height: 10),
@@ -743,7 +861,7 @@ class _RetiroAnticipadoModalState extends State<_RetiroAnticipadoModal> {
               child: Row(children: [
                 const Icon(Icons.error_outline, size: 14, color: AAMColors.danger),
                 const SizedBox(width: 8),
-                Text(_error!, style: GoogleFonts.dmSans(fontSize: 12, color: AAMColors.danger)),
+                Expanded(child: Text(_error!, style: GoogleFonts.dmSans(fontSize: 12, color: AAMColors.danger))),
               ]),
             ),
           ],
@@ -782,37 +900,20 @@ class _RetiroAnticipadoModalState extends State<_RetiroAnticipadoModal> {
 class _NoComputableModal extends StatefulWidget {
   const _NoComputableModal({required this.registro, required this.onConfirm});
   final AttendanceRecord registro;
-  final Future<void> Function(String motivo) onConfirm;
+  final Future<void> Function() onConfirm;
 
   @override
   State<_NoComputableModal> createState() => _NoComputableModalState();
 }
 
 class _NoComputableModalState extends State<_NoComputableModal> {
-  String _motivo = 'Superposición horaria (recursante)';
-  final _otroCtrl = TextEditingController();
   bool _loading = false;
   String? _error;
 
-  static const List<String> _motivos = [
-    'Superposición horaria (recursante)',
-    'Evento institucional',
-    'Actividad extracurricular autorizada',
-    'Otro',
-  ];
-
-  @override
-  void dispose() { _otroCtrl.dispose(); super.dispose(); }
-
   Future<void> _submit() async {
-    final motivoFinal = _motivo == 'Otro' ? _otroCtrl.text.trim() : _motivo;
-    if (motivoFinal.isEmpty) {
-      setState(() => _error = 'Especificá el motivo.');
-      return;
-    }
     setState(() { _loading = true; _error = null; });
     try {
-      await widget.onConfirm(motivoFinal);
+      await widget.onConfirm();
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       setState(() => _error = e.toString());
@@ -856,61 +957,29 @@ class _NoComputableModalState extends State<_NoComputableModal> {
                     child: Icon(Icons.close, size: 16, color: theme.textSec)),
                 ),
               ]),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(color: AAMColors.accent.withAlpha((0.08 * 255).round()), borderRadius: BorderRadius.circular(8)),
                 child: Row(children: [
                   const Icon(Icons.info_outline, size: 14, color: AAMColors.accent),
                   const SizedBox(width: 8),
-                  Expanded(child: Text('La falta no afectará el cálculo del RITE del alumno.',
+                  Expanded(child: Text(
+                    'La falta no afectará el cálculo del RITE del alumno. '
+                    'El schema no guarda un motivo de texto para esto — solo cambia el estado.',
                     style: GoogleFonts.dmSans(fontSize: 12, color: theme.text))),
                 ]),
               ),
-              const SizedBox(height: 20),
-
-              Text('Motivo', style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: theme.textSec)),
-              const SizedBox(height: 6),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(10)),
-                child: DropdownButton<String>(
-                  value: _motivo,
-                  underline: const SizedBox.shrink(),
-                  isExpanded: true,
-                  style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
-                  items: _motivos.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                  onChanged: (v) => setState(() => _motivo = v ?? _motivo),
-                ),
-              ),
-
-              if (_motivo == 'Otro') ...[
-                const SizedBox(height: 12),
-                Container(
-                  decoration: BoxDecoration(border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(10)),
-                  child: TextField(
-                    controller: _otroCtrl,
-                    style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
-                    decoration: InputDecoration(
-                      hintText: 'Especificá el motivo...',
-                      hintStyle: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.all(14),
-                    ),
-                  ),
-                ),
-              ],
 
               if (_error != null) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(color: AAMColors.danger.withAlpha((0.08 * 255).round()), borderRadius: BorderRadius.circular(8)),
                   child: Row(children: [
                     const Icon(Icons.error_outline, size: 14, color: AAMColors.danger),
                     const SizedBox(width: 8),
-                    Text(_error!, style: GoogleFonts.dmSans(fontSize: 12, color: AAMColors.danger)),
+                    Expanded(child: Text(_error!, style: GoogleFonts.dmSans(fontSize: 12, color: AAMColors.danger))),
                   ]),
                 ),
               ],

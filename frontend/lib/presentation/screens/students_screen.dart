@@ -4,9 +4,9 @@ import '../../domain/entities/student.dart';
 import '../../domain/entities/course.dart';
 import '../../domain/entities/workshop_group.dart';
 import '../../domain/usecases/get_students.dart';
+import '../../domain/usecases/create_student.dart';
 import '../../infrastructure/datasources/api_datasource.dart';
 import '../../infrastructure/repositories/student_repository_impl.dart';
-import '../../infrastructure/repositories/course_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
 
 class AlumnosScreen extends StatefulWidget {
@@ -18,8 +18,8 @@ class AlumnosScreen extends StatefulWidget {
 
 class _AlumnosScreenState extends State<AlumnosScreen> {
   late final StudentRepositoryImpl _repo;
-  late final CourseRepositoryImpl _cursoRepo;
   late final GetStudents _getStudents;
+  late final CreateStudent _createStudent;
   late Future<List<Student>> _future;
 
   String _searchQuery = '';
@@ -31,25 +31,18 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
     super.initState();
     final api = ApiDatasource();
     _repo = StudentRepositoryImpl(api);
-    _cursoRepo = CourseRepositoryImpl(api);
     _getStudents = GetStudents(_repo);
+    _createStudent = CreateStudent(_repo);
     _future = _getStudents();
   }
 
   void _refresh() => setState(() => _future = _getStudents());
 
   Future<void> _abrirNuevoAlumno() async {
-    final cursos = await _cursoRepo.getCourses();
-    if (!mounted) return;
     final result = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
-      builder: (_) => _AlumnoFormModal(
-        cursosDisponibles: cursos,
-        onSave: (alumno) async {
-          await _repo.crearAlumno(alumno.copyWith(id: 'tmp'));
-        },
-      ),
+      builder: (_) => _NuevoAlumnoForm(repo: _repo, createStudent: _createStudent),
     );
     if (result == true) _refresh();
   }
@@ -63,14 +56,11 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
   }
 
   Future<void> _abrirEdicion(Student alumno) async {
-    final cursos = await _cursoRepo.getCourses();
-    if (!mounted) return;
     final result = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
-      builder: (_) => _AlumnoFormModal(
+      builder: (_) => _EditarAlumnoModal(
         alumno: alumno,
-        cursosDisponibles: cursos,
         onSave: (updated) async {
           await _repo.actualizarAlumno(updated);
         },
@@ -236,7 +226,6 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
         const AAMTableHeader(columns: [
           ('Alumno',       3),
           ('Curso',        2),
-          ('Especialidad', 2),
           ('DNI',          2),
           ('Asistencia',   2),
           ('Estado',       2),
@@ -346,9 +335,6 @@ class _AlumnoRowState extends State<_AlumnoRow> {
             // Curso
             Expanded(flex: 2, child: Text(a.curso,
               style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.text))),
-            // Especialidad
-            Expanded(flex: 2, child: Text(a.especialidad,
-              style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
             // DNI
             Expanded(flex: 2, child: Text(a.dni,
               style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
@@ -468,7 +454,7 @@ class _AlumnoDetalleModal extends StatelessWidget {
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(alumno.nombreCompleto, style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w700, color: theme.text)),
                   const SizedBox(height: 4),
-                  Text('${alumno.curso} · ${alumno.especialidad} · ${alumno.turno}',
+                  Text(alumno.curso,
                     style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
                 ])),
                 GestureDetector(
@@ -501,8 +487,8 @@ class _AlumnoDetalleModal extends StatelessWidget {
               Wrap(spacing: 10, runSpacing: 10, children: [
                 _DetalleChip(label: 'DNI', value: alumno.dni),
                 _DetalleChip(label: 'Curso', value: alumno.curso),
-                _DetalleChip(label: 'Turno', value: alumno.turno),
-                _DetalleChip(label: 'Especialidad', value: alumno.especialidad),
+                if (alumno.taller != null)
+                  _DetalleChip(label: 'Taller', value: alumno.taller!, color: AAMColors.accent),
                 _DetalleChip(label: 'Estado', value: estadoLabel, color: estadoColor),
                 if (alumno.recursante)
                   _DetalleChip(label: 'Recursante', value: 'Sí', color: AAMColors.accent),
@@ -530,193 +516,43 @@ class _AlumnoDetalleModal extends StatelessWidget {
   }
 }
 
-class _AlumnoFormModal extends StatefulWidget {
-  const _AlumnoFormModal({this.alumno, required this.cursosDisponibles, required this.onSave});
+// ─── Alta de alumno (cascada: año lectivo → año de cursada → división → taller) ───
+class _NuevoAlumnoForm extends StatefulWidget {
+  const _NuevoAlumnoForm({required this.repo, required this.createStudent});
 
-  final Student? alumno;
-  final List<Course> cursosDisponibles;
-  final Future<void> Function(Student alumno) onSave;
+  final StudentRepositoryImpl repo;
+  final CreateStudent createStudent;
 
   @override
-  State<_AlumnoFormModal> createState() => _AlumnoFormModalState();
+  State<_NuevoAlumnoForm> createState() => _NuevoAlumnoFormState();
 }
 
-class _AlumnoFormModalState extends State<_AlumnoFormModal> {
-  late final TextEditingController _nombreCtrl;
-  late final TextEditingController _apellidoCtrl;
-  late final TextEditingController _dniCtrl;
-  String? _anioSel;
-  String? _divisionSel;
-  String? _especialidadSel;
-  String? _turnoSel;
-  bool _recursante = false;
-  bool _loading = false;
-  String? _error;
+class _NuevoAlumnoFormState extends State<_NuevoAlumnoForm> {
+  final _nombreCtrl = TextEditingController();
+  final _apellidoCtrl = TextEditingController();
+  final _dniCtrl = TextEditingController();
 
-  final ApiDatasource _ds = ApiDatasource();
-  List<WorkshopGroup> _catalogoTalleres = [];
-  Set<int> _misTalleres = {};
+  // `courses` no tiene catálogos propios (año lectivo/año de cursada/división
+  // son 3 columnas numéricas con UNIQUE compuesto) — los selectores en
+  // cascada se derivan de los cursos ya existentes. El grupo de taller es un
+  // FK simple y opcional, scoped al curso ya resuelto.
+  List<Course> _cursos = [];
+  List<WorkshopGroup> _talleres = [];
+
+  int? _anioLectivoSel;
+  int? _anioCursadaSel;
+  int? _divisionSel;
+  WorkshopGroup? _tallerSel;
+
+  bool _cursosLoading = true;
   bool _talleresLoading = false;
-  String? _talleresError;
-
-  bool get _esEdicion => widget.alumno != null;
-
-  List<String> get _anios {
-    final s = widget.cursosDisponibles.map((c) => c.academicYear).toSet().toList();
-    s.sort();
-    return s;
-  }
-
-  List<String> get _divisiones {
-    if (_anioSel == null) return [];
-    final s = widget.cursosDisponibles
-        .where((c) => c.academicYear == _anioSel)
-        .map((c) => c.division)
-        .toSet()
-        .toList();
-    s.sort();
-    return s;
-  }
-
-  List<String> get _especialidades {
-    if (_anioSel == null || _divisionSel == null) return [];
-    final s = widget.cursosDisponibles
-        .where((c) => c.academicYear == _anioSel && c.division == _divisionSel)
-        .map((c) => c.specialty)
-        .toSet()
-        .toList();
-    s.sort();
-    return s;
-  }
-
-  List<String> get _turnos {
-    if (_anioSel == null || _divisionSel == null || _especialidadSel == null) return [];
-    final s = widget.cursosDisponibles
-        .where((c) => c.academicYear == _anioSel && c.division == _divisionSel && c.specialty == _especialidadSel)
-        .map((c) => c.shift)
-        .toSet()
-        .toList();
-    s.sort();
-    return s;
-  }
-
-  // Un curso se identifica por las 4 dimensiones (año + división + especialidad
-  // + turno). Resolver con menos es un bug: pueden existir dos cursos iguales en
-  // año/división/especialidad y distinto turno (UNIQUE de `courses` sobre las 4).
-  Course? get _cursoResuelto {
-    if (_anioSel == null || _divisionSel == null || _especialidadSel == null || _turnoSel == null) {
-      return null;
-    }
-    try {
-      return widget.cursosDisponibles.firstWhere((c) =>
-          c.academicYear == _anioSel &&
-          c.division == _divisionSel &&
-          c.specialty == _especialidadSel &&
-          c.shift == _turnoSel);
-    } catch (_) {
-      return null;
-    }
-  }
+  bool _submitting = false;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _nombreCtrl = TextEditingController(text: widget.alumno?.nombre ?? '');
-    _apellidoCtrl = TextEditingController(text: widget.alumno?.apellido ?? '');
-    _dniCtrl = TextEditingController(text: widget.alumno?.dni ?? '');
-    _recursante = widget.alumno?.recursante ?? false;
-    if (widget.alumno != null) {
-      final actual = widget.cursosDisponibles.where((c) => c.id == widget.alumno!.cursoId).toList();
-      if (actual.isNotEmpty) {
-        _anioSel = actual.first.academicYear;
-        _divisionSel = actual.first.division;
-        _especialidadSel = actual.first.specialty;
-        _turnoSel = actual.first.shift;
-      }
-    }
-    if (_esEdicion) _cargarTalleres();
-  }
-
-  Future<void> _cargarTalleres() async {
-    setState(() { _talleresLoading = true; _talleresError = null; });
-    try {
-      final catalogo = await _ds.getWorkshopGroups();
-      final mios = await _ds.getWorkshopGroupsDeAlumno(widget.alumno!.id);
-      if (!mounted) return;
-      setState(() {
-        _catalogoTalleres = catalogo;
-        _misTalleres = mios.map((w) => w.id).toSet();
-      });
-    } catch (e) {
-      if (mounted) setState(() => _talleresError = 'No se pudieron cargar los talleres.');
-    } finally {
-      if (mounted) setState(() => _talleresLoading = false);
-    }
-  }
-
-  Future<void> _toggleTaller(WorkshopGroup w) async {
-    final estaba = _misTalleres.contains(w.id);
-    // Optimistic UI; se revierte si el request falla.
-    setState(() {
-      _talleresError = null;
-      estaba ? _misTalleres.remove(w.id) : _misTalleres.add(w.id);
-    });
-    try {
-      if (estaba) {
-        await _ds.quitarWorkshopGroupDeAlumno(widget.alumno!.id, w.id);
-      } else {
-        await _ds.agregarWorkshopGroupAAlumno(widget.alumno!.id, w.id);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        estaba ? _misTalleres.add(w.id) : _misTalleres.remove(w.id);
-        _talleresError = 'No se pudo actualizar el taller.';
-      });
-    }
-  }
-
-  Widget _buildTalleresSelector(AAMTheme theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Grupos de taller',
-          style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: theme.textSec)),
-        const SizedBox(height: 8),
-        if (!_esEdicion)
-          Text('Guardá el alumno para poder asignarle talleres.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec))
-        else if (_talleresLoading)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 4),
-            child: SizedBox(width: 18, height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2, color: AAMColors.accent)))
-        else if (_catalogoTalleres.isEmpty)
-          Text('No hay grupos de taller cargados.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec))
-        else
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            for (final w in _catalogoTalleres)
-              FilterChip(
-                label: Text(w.name),
-                selected: _misTalleres.contains(w.id),
-                onSelected: (_) => _toggleTaller(w),
-                selectedColor: AAMColors.accent.withValues(alpha: 0.2),
-                checkmarkColor: AAMColors.primary,
-                backgroundColor: theme.surfaceCol,
-                labelStyle: GoogleFonts.dmSans(fontSize: 13,
-                  color: _misTalleres.contains(w.id) ? AAMColors.primary : theme.text),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: BorderSide(color: theme.borderCol)),
-              ),
-          ]),
-        if (_talleresError != null) ...[
-          const SizedBox(height: 6),
-          Text(_talleresError!, style: GoogleFonts.dmSans(fontSize: 12, color: AAMColors.highlight)),
-        ],
-      ],
-    );
+    _loadCursos();
   }
 
   @override
@@ -727,47 +563,151 @@ class _AlumnoFormModalState extends State<_AlumnoFormModal> {
     super.dispose();
   }
 
+  Future<void> _loadCursos() async {
+    setState(() {
+      _cursosLoading = true;
+      _error = null;
+    });
+    try {
+      final cs = await widget.repo.getCourses();
+      if (!mounted) return;
+      setState(() => _cursos = cs);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'No se pudieron cargar los cursos.');
+    } finally {
+      if (mounted) setState(() => _cursosLoading = false);
+    }
+  }
+
+  List<int> get _aniosLectivos {
+    final s = _cursos.map((c) => c.academicYear).toSet().toList()..sort();
+    return s;
+  }
+
+  List<int> get _aniosCursada {
+    if (_anioLectivoSel == null) return [];
+    final s = _cursos
+        .where((c) => c.academicYear == _anioLectivoSel)
+        .map((c) => c.gradeYear)
+        .toSet()
+        .toList()
+      ..sort();
+    return s;
+  }
+
+  List<int> get _divisiones {
+    if (_anioLectivoSel == null || _anioCursadaSel == null) return [];
+    final s = _cursos
+        .where((c) => c.academicYear == _anioLectivoSel && c.gradeYear == _anioCursadaSel)
+        .map((c) => c.division)
+        .toSet()
+        .toList()
+      ..sort();
+    return s;
+  }
+
+  // El curso queda unívocamente identificado por las 3 dimensiones: el
+  // UNIQUE de `courses` está sobre (academic_year, grade_year, division).
+  Course? get _cursoResuelto {
+    final a = _anioLectivoSel, g = _anioCursadaSel, d = _divisionSel;
+    if (a == null || g == null || d == null) return null;
+    try {
+      return _cursos.firstWhere(
+          (c) => c.academicYear == a && c.gradeYear == g && c.division == d);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _onAnioLectivoChanged(int? v) {
+    setState(() {
+      _anioLectivoSel = v;
+      _anioCursadaSel = null;
+      _divisionSel = null;
+      _tallerSel = null;
+      _talleres = [];
+      _error = null;
+    });
+  }
+
+  void _onAnioCursadaChanged(int? v) {
+    setState(() {
+      _anioCursadaSel = v;
+      _divisionSel = null;
+      _tallerSel = null;
+      _talleres = [];
+      _error = null;
+    });
+  }
+
+  void _onDivisionChanged(int? v) {
+    setState(() {
+      _divisionSel = v;
+      _tallerSel = null;
+      _talleres = [];
+      _error = null;
+    });
+    final curso = _cursoResuelto;
+    if (curso != null) _cargarTalleres(curso);
+  }
+
+  // Los grupos de taller son una subdivisión interna de ESTE curso puntual
+  // (no se comparten entre cursos) — recién se pueden pedir una vez resuelto.
+  Future<void> _cargarTalleres(Course curso) async {
+    setState(() => _talleresLoading = true);
+    try {
+      final ts = await widget.repo.getWorkshopGroupsByCourse(curso.id);
+      if (!mounted || _cursoResuelto?.id != curso.id) return; // selección obsoleta
+      setState(() => _talleres = ts);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'No se pudieron cargar los grupos de taller.');
+    } finally {
+      if (mounted) setState(() => _talleresLoading = false);
+    }
+  }
+
   Future<void> _submit() async {
-    final dni = _dniCtrl.text.trim();
-    if (_nombreCtrl.text.trim().isEmpty ||
-        _apellidoCtrl.text.trim().isEmpty ||
-        dni.isEmpty ||
-        _anioSel == null ||
-        _divisionSel == null ||
-        _especialidadSel == null ||
-        _turnoSel == null) {
-      setState(() => _error = 'Completa todos los campos.');
+    if (_anioLectivoSel == null) {
+      setState(() => _error = 'Seleccioná un año lectivo.');
       return;
     }
-    if (!RegExp(r'^\d{8}$').hasMatch(dni)) {
-      setState(() => _error = 'El DNI debe tener 8 dígitos.');
+    if (_anioCursadaSel == null) {
+      setState(() => _error = 'Seleccioná un año de cursada.');
+      return;
+    }
+    if (_divisionSel == null) {
+      setState(() => _error = 'Seleccioná una división.');
       return;
     }
     final curso = _cursoResuelto;
     if (curso == null) {
-      setState(() => _error = 'No se encontró el curso seleccionado.');
+      setState(() => _error = 'No existe un curso para esa combinación de año y división.');
       return;
     }
-    setState(() { _loading = true; _error = null; });
+    // El grupo de taller es obligatorio salvo que el curso directamente no
+    // tenga ninguno cargado (no hay nada para elegir en ese caso).
+    if (_tallerSel == null && _talleres.isNotEmpty) {
+      setState(() => _error = 'Seleccioná un grupo de taller.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
     try {
-      final alumno = Student(
-        id: widget.alumno?.id ?? 'tmp',
-        nombre: _nombreCtrl.text.trim(),
-        apellido: _apellidoCtrl.text.trim(),
-        dni: dni,
-        cursoId: curso.id,
-        curso: curso.name,
-        especialidad: curso.specialty,
-        turno: curso.shift,
-        recursante: _recursante,
-        porcentajeAsistencia: widget.alumno?.porcentajeAsistencia ?? 100.0,
+      await widget.createStudent.call(
+        firstName: _nombreCtrl.text,
+        lastName: _apellidoCtrl.text,
+        nationalId: _dniCtrl.text,
+        courseId: curso.id,
+        workshopGroupId: _tallerSel?.id,
       );
-      await widget.onSave(alumno);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
-      setState(() => _error = e.toString());
+      // Muestra el mensaje del backend (p.ej. DNI duplicado) o de validación.
+      if (mounted) setState(() => _error = e.toString());
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
@@ -796,10 +736,8 @@ class _AlumnoFormModalState extends State<_AlumnoFormModal> {
                     child: const Icon(Icons.person_add_outlined, size: 18, color: AAMColors.white),
                   ),
                   const SizedBox(width: 12),
-                  Expanded(child: Text(
-                    widget.alumno == null ? 'Nuevo alumno' : 'Editar alumno',
-                    style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w700, color: theme.text),
-                  )),
+                  Expanded(child: Text('Nuevo alumno',
+                    style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w700, color: theme.text))),
                   GestureDetector(
                     onTap: () => Navigator.of(context).pop(false),
                     child: Container(
@@ -810,80 +748,266 @@ class _AlumnoFormModalState extends State<_AlumnoFormModal> {
                   ),
                 ]),
                 const SizedBox(height: 24),
-                _FieldGroup(label: 'Apellido', child: _buildInput(_apellidoCtrl, 'Ej: Rodríguez')),
-                const SizedBox(height: 16),
-                _FieldGroup(label: 'Nombre', child: _buildInput(_nombreCtrl, 'Ej: María')),
-                const SizedBox(height: 16),
-                _FieldGroup(label: 'DNI', child: _buildInput(_dniCtrl, 'Ej: 12345678')),
-                const SizedBox(height: 16),
+
+                // 1) Año lectivo   ·   2) Año de cursada (habilitado al elegir año lectivo)
                 Row(children: [
-                  Expanded(child: _DropdownGroup<String>(
-                    label: 'Año',
-                    value: _anioSel,
-                    options: _anios,
-                    hint: 'Año',
-                    itemLabel: (a) => '$a°',
-                    onChanged: (v) => setState(() {
-                      _anioSel = v;
-                      _divisionSel = null;
-                      _especialidadSel = null;
-                      _turnoSel = null;
-                    }),
+                  Expanded(child: _DropdownGroup<int>(
+                    label: 'Año lectivo',
+                    value: _anioLectivoSel,
+                    options: _aniosLectivos,
+                    hint: _cursosLoading ? 'Cargando...' : 'Año lectivo',
+                    itemLabel: (a) => '$a',
+                    onChanged: _cursosLoading ? null : _onAnioLectivoChanged,
                   )),
                   const SizedBox(width: 16),
-                  Expanded(child: _DropdownGroup<String>(
-                    label: 'División',
-                    value: _divisionSel,
-                    options: _divisiones,
-                    hint: 'División',
-                    onChanged: _anioSel == null ? null : (v) => setState(() {
-                      _divisionSel = v;
-                      _especialidadSel = null;
-                      _turnoSel = null;
-                    }),
+                  Expanded(child: _DropdownGroup<int>(
+                    label: 'Año de cursada',
+                    value: _anioCursadaSel,
+                    options: _aniosCursada,
+                    hint: _anioLectivoSel == null
+                        ? 'Elegí un año lectivo'
+                        : 'Año de cursada',
+                    itemLabel: gradeYearOrdinal,
+                    onChanged: _anioLectivoSel == null ? null : _onAnioCursadaChanged,
                   )),
                 ]),
                 const SizedBox(height: 16),
+                // 3) División
+                _DropdownGroup<int>(
+                  label: 'División',
+                  value: _divisionSel,
+                  options: _divisiones,
+                  hint: _anioCursadaSel == null ? 'Elegí un año de cursada' : 'División',
+                  itemLabel: divisionOrdinal,
+                  onChanged: _anioCursadaSel == null ? null : _onDivisionChanged,
+                ),
+                const SizedBox(height: 16),
+                // 4) Grupo de taller (grupos de ESTE curso puntual, una vez resuelto)
+                _DropdownGroup<WorkshopGroup>(
+                  label: 'Grupo de taller',
+                  value: _tallerSel,
+                  options: _talleres,
+                  hint: _divisionSel == null
+                      ? 'Elegí año, año de cursada y división'
+                      : (_talleresLoading
+                          ? 'Cargando...'
+                          : (_talleres.isEmpty ? 'Este curso no tiene grupos cargados' : 'Grupo de taller')),
+                  itemLabel: (w) => w.name,
+                  onChanged: (_divisionSel == null || _talleresLoading || _talleres.isEmpty)
+                      ? null
+                      : (v) => setState(() => _tallerSel = v),
+                ),
+
+                const SizedBox(height: 16),
+                // 5) Nombre   ·   6) Apellido   ·   7) DNI
+                _FieldGroup(label: 'Nombre', child: _input(_nombreCtrl, 'Ej: María')),
+                const SizedBox(height: 16),
+                _FieldGroup(label: 'Apellido', child: _input(_apellidoCtrl, 'Ej: Rodríguez')),
+                const SizedBox(height: 16),
+                _FieldGroup(label: 'DNI', child: _input(_dniCtrl, 'Ej: 12345678', keyboard: TextInputType.number)),
+
+                if (_error != null) ...[
+                  const SizedBox(height: 14),
+                  Text(_error!, style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.highlight)),
+                ],
+                const SizedBox(height: 24),
                 Row(children: [
-                  Expanded(child: _DropdownGroup<String>(
-                    label: 'Especialidad',
-                    value: _especialidadSel,
-                    options: _especialidades,
-                    hint: 'Especialidad',
-                    onChanged: _divisionSel == null ? null : (v) => setState(() {
-                      _especialidadSel = v;
-                      _turnoSel = null;
-                    }),
-                  )),
-                  const SizedBox(width: 16),
-                  Expanded(child: _DropdownGroup<String>(
-                    label: 'Turno',
-                    value: _turnoSel,
-                    options: _turnos,
-                    hint: 'Turno',
-                    onChanged: _especialidadSel == null ? null : (v) => setState(() => _turnoSel = v),
-                  )),
-                ]),
-                if (_cursoResuelto != null) ...[
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: theme.surfaceCol,
-                      borderRadius: BorderRadius.circular(10),
+                  Expanded(child: GestureDetector(
+                    onTap: () => Navigator.of(context).pop(false),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(10)),
+                      child: Center(child: Text('Cancelar', style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec))),
                     ),
-                    child: Text(
-                      'Especialidad: ${_cursoResuelto!.specialty}   ·   Turno: ${_cursoResuelto!.shift}',
-                      style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
+                  )),
+                  const SizedBox(width: 14),
+                  Expanded(child: GestureDetector(
+                    onTap: _submitting ? null : _submit,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(color: _submitting ? AAMColors.accent.withAlpha((0.6 * 255).round()) : AAMColors.accent, borderRadius: BorderRadius.circular(10)),
+                      child: Center(child: _submitting
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: AAMColors.white, strokeWidth: 2))
+                        : Text('Crear alumno', style: GoogleFonts.dmSans(fontSize: 14, color: AAMColors.white))),
+                    ),
+                  )),
+                ]),
+              ]),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _input(TextEditingController controller, String hint, {TextInputType? keyboard}) {
+    final theme = AAMTheme();
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.borderCol),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboard,
+        style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Edición de alumno (nombre/DNI + grupos de taller individuales) ───────────
+class _EditarAlumnoModal extends StatefulWidget {
+  const _EditarAlumnoModal({required this.alumno, required this.onSave});
+
+  final Student alumno;
+  final Future<void> Function(Student alumno) onSave;
+
+  @override
+  State<_EditarAlumnoModal> createState() => _EditarAlumnoModalState();
+}
+
+class _EditarAlumnoModalState extends State<_EditarAlumnoModal> {
+  late final TextEditingController _nombreCtrl;
+  late final TextEditingController _apellidoCtrl;
+  late final TextEditingController _dniCtrl;
+  bool _submitting = false;
+  String? _error;
+
+  final ApiDatasource _ds = ApiDatasource();
+  List<WorkshopGroup> _talleres = [];
+  WorkshopGroup? _tallerSel;
+  bool _talleresLoading = false;
+  String? _talleresError;
+
+  @override
+  void initState() {
+    super.initState();
+    _nombreCtrl = TextEditingController(text: widget.alumno.nombre);
+    _apellidoCtrl = TextEditingController(text: widget.alumno.apellido);
+    _dniCtrl = TextEditingController(text: widget.alumno.dni);
+    _cargarTalleres();
+  }
+
+  @override
+  void dispose() {
+    _nombreCtrl.dispose();
+    _apellidoCtrl.dispose();
+    _dniCtrl.dispose();
+    super.dispose();
+  }
+
+  // Los grupos son una subdivisión interna del curso del alumno — no se
+  // comparten entre cursos.
+  Future<void> _cargarTalleres() async {
+    setState(() {
+      _talleresLoading = true;
+      _talleresError = null;
+    });
+    try {
+      final talleres = await _ds.getWorkshopGroupsByCourse(widget.alumno.cursoId);
+      if (!mounted) return;
+      WorkshopGroup? actual;
+      if (widget.alumno.workshopGroupId != null) {
+        try {
+          actual = talleres.firstWhere((w) => w.id == widget.alumno.workshopGroupId);
+        } catch (_) {
+          actual = null;
+        }
+      }
+      setState(() {
+        _talleres = talleres;
+        _tallerSel = actual;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _talleresError = 'No se pudieron cargar los grupos de taller.');
+    } finally {
+      if (mounted) setState(() => _talleresLoading = false);
+    }
+  }
+
+  Future<void> _submit() async {
+    if (_nombreCtrl.text.trim().isEmpty ||
+        _apellidoCtrl.text.trim().isEmpty ||
+        _dniCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Completá nombre, apellido y DNI.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await widget.onSave(widget.alumno.copyWith(
+        nombre: _nombreCtrl.text.trim(),
+        apellido: _apellidoCtrl.text.trim(),
+        dni: _dniCtrl.text.trim(),
+        workshopGroupId: _tallerSel?.id,
+        clearWorkshopGroupId: _tallerSel == null,
+      ));
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: AAMTheme(),
+      builder: (context, _) {
+        final theme = AAMTheme();
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            width: 480,
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: theme.card,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [BoxShadow(color: Colors.black.withAlpha((0.12 * 255).round()), blurRadius: 32, offset: const Offset(0, 8))],
+            ),
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(color: AAMColors.primary, borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.edit_outlined, size: 18, color: AAMColors.white),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text('Editar alumno',
+                    style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w700, color: theme.text))),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(false),
+                    child: Container(
+                      width: 30, height: 30,
+                      decoration: BoxDecoration(color: theme.surfaceCol, borderRadius: BorderRadius.circular(8)),
+                      child: Icon(Icons.close, size: 16, color: theme.textSec),
                     ),
                   ),
-                ],
-                const SizedBox(height: 16),
-                Row(children: [
-                  Switch(value: _recursante, onChanged: (v) => setState(() => _recursante = v)),
-                  const SizedBox(width: 8),
-                  Text('Recursante', style: GoogleFonts.dmSans(fontSize: 14, color: theme.text)),
                 ]),
+                const SizedBox(height: 24),
+                _FieldGroup(label: 'Nombre', child: _input(_nombreCtrl, 'Ej: María')),
+                const SizedBox(height: 16),
+                _FieldGroup(label: 'Apellido', child: _input(_apellidoCtrl, 'Ej: Rodríguez')),
+                const SizedBox(height: 16),
+                _FieldGroup(label: 'DNI', child: _input(_dniCtrl, 'Ej: 12345678', keyboard: TextInputType.number)),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(color: theme.surfaceCol, borderRadius: BorderRadius.circular(10)),
+                  child: Text('Curso: ${widget.alumno.curso}',
+                    style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
+                ),
                 const SizedBox(height: 16),
                 _buildTalleresSelector(theme),
                 if (_error != null) ...[
@@ -902,14 +1026,13 @@ class _AlumnoFormModalState extends State<_AlumnoFormModal> {
                   )),
                   const SizedBox(width: 14),
                   Expanded(child: GestureDetector(
-                    onTap: _loading ? null : _submit,
+                    onTap: _submitting ? null : _submit,
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(color: _loading ? AAMColors.accent.withAlpha((0.6 * 255).round()) : AAMColors.accent, borderRadius: BorderRadius.circular(10)),
-                      child: Center(child: _loading
+                      decoration: BoxDecoration(color: _submitting ? AAMColors.accent.withAlpha((0.6 * 255).round()) : AAMColors.accent, borderRadius: BorderRadius.circular(10)),
+                      child: Center(child: _submitting
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: AAMColors.white, strokeWidth: 2))
-                        : Text(widget.alumno == null ? 'Crear alumno' : 'Guardar cambios',
-                            style: GoogleFonts.dmSans(fontSize: 14, color: AAMColors.white))),
+                        : Text('Guardar cambios', style: GoogleFonts.dmSans(fontSize: 14, color: AAMColors.white))),
                     ),
                   )),
                 ]),
@@ -921,7 +1044,53 @@ class _AlumnoFormModalState extends State<_AlumnoFormModal> {
     );
   }
 
-  Widget _buildInput(TextEditingController controller, String hint) {
+  Widget _buildTalleresSelector(AAMTheme theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Grupo de taller',
+          style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: theme.textSec)),
+        const SizedBox(height: 8),
+        if (_talleresLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 4),
+            child: SizedBox(width: 18, height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AAMColors.accent)))
+        else if (_talleres.isEmpty)
+          Text('No hay grupos de taller cargados para este curso.',
+            style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec))
+        else
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              border: Border.all(color: theme.borderCol),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: DropdownButton<WorkshopGroup?>(
+              value: _tallerSel,
+              underline: const SizedBox.shrink(),
+              isExpanded: true,
+              style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
+              items: [
+                DropdownMenuItem<WorkshopGroup?>(
+                  value: null,
+                  child: Text('Sin asignar', style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec)),
+                ),
+                ..._talleres.map((w) => DropdownMenuItem<WorkshopGroup?>(value: w, child: Text(w.name))),
+              ],
+              onChanged: (v) => setState(() => _tallerSel = v),
+            ),
+          ),
+        if (_talleresError != null) ...[
+          const SizedBox(height: 6),
+          Text(_talleresError!, style: GoogleFonts.dmSans(fontSize: 12, color: AAMColors.highlight)),
+        ],
+      ],
+    );
+  }
+
+  Widget _input(TextEditingController controller, String hint, {TextInputType? keyboard}) {
     final theme = AAMTheme();
     return Container(
       decoration: BoxDecoration(
@@ -930,6 +1099,7 @@ class _AlumnoFormModalState extends State<_AlumnoFormModal> {
       ),
       child: TextField(
         controller: controller,
+        keyboardType: keyboard,
         style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
         decoration: InputDecoration(
           hintText: hint,

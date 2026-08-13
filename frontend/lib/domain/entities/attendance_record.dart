@@ -6,28 +6,22 @@ class AttendanceRecord {
     required this.studentId,
     required this.studentName,
     required this.courseId,
-    required this.date,
-    required this.checkInTime,
+    required this.entryTimestamp,
     required this.source,
     required this.status,
     this.departureTime,
     this.departureReason,
-    this.isNonComputable = false,
-    this.nonComputableReason,
   });
 
-  final String id;             // ULID generated on ESP32 or backend
+  final String id;             // ULID generado en el ESP32 o en el backend (alta manual)
   final String studentId;
   final String studentName;
   final String courseId;
-  final DateTime date;
-  final DateTime? checkInTime;
+  final DateTime entryTimestamp;
   final AttendanceSource source;
   final AttendanceStatus status;
   final DateTime? departureTime;
   final String? departureReason;
-  final bool isNonComputable;
-  final String? nonComputableReason;
 
   bool get hasEarlyDeparture => departureTime != null;
 
@@ -36,43 +30,38 @@ class AttendanceRecord {
     String? studentId,
     String? studentName,
     String? courseId,
-    DateTime? date,
-    DateTime? checkInTime,
+    DateTime? entryTimestamp,
     AttendanceSource? source,
     AttendanceStatus? status,
     DateTime? departureTime,
     String? departureReason,
-    bool? isNonComputable,
-    String? nonComputableReason,
   }) {
     return AttendanceRecord(
-      id:                  id                  ?? this.id,
-      studentId:           studentId           ?? this.studentId,
-      studentName:         studentName         ?? this.studentName,
-      courseId:            courseId            ?? this.courseId,
-      date:                date                ?? this.date,
-      checkInTime:         checkInTime         ?? this.checkInTime,
-      source:              source              ?? this.source,
-      status:              status              ?? this.status,
-      departureTime:       departureTime       ?? this.departureTime,
-      departureReason:     departureReason     ?? this.departureReason,
-      isNonComputable:     isNonComputable     ?? this.isNonComputable,
-      nonComputableReason: nonComputableReason ?? this.nonComputableReason,
+      id:               id               ?? this.id,
+      studentId:        studentId        ?? this.studentId,
+      studentName:      studentName      ?? this.studentName,
+      courseId:         courseId         ?? this.courseId,
+      entryTimestamp:   entryTimestamp   ?? this.entryTimestamp,
+      source:           source           ?? this.source,
+      status:           status           ?? this.status,
+      departureTime:    departureTime    ?? this.departureTime,
+      departureReason:  departureReason  ?? this.departureReason,
     );
   }
 }
 
-enum AttendanceSource { nfc, qr, manual, unknown }
+enum AttendanceSource { nfc, qr, manual }
 
-enum AttendanceStatus { present, absent, late, nonComputable }
+enum AttendanceStatus { present, late, absent, absentWithPresence, nonComputableAbsence }
 
 extension AttendanceStatusLabel on AttendanceStatus {
   String get label {
     switch (this) {
-      case AttendanceStatus.present:       return 'Presente';
-      case AttendanceStatus.absent:        return 'Ausente';
-      case AttendanceStatus.late:          return 'Tardanza';
-      case AttendanceStatus.nonComputable: return 'No computable';
+      case AttendanceStatus.present:               return 'Presente';
+      case AttendanceStatus.absent:                return 'Ausente';
+      case AttendanceStatus.late:                  return 'Tardanza';
+      case AttendanceStatus.absentWithPresence:    return 'Ausente con permanencia';
+      case AttendanceStatus.nonComputableAbsence:  return 'No computable';
     }
   }
 }
@@ -83,19 +72,20 @@ extension AttendanceSourceLabel on AttendanceSource {
       case AttendanceSource.nfc:     return 'NFC';
       case AttendanceSource.qr:      return 'QR';
       case AttendanceSource.manual:  return 'Manual';
-      case AttendanceSource.unknown: return '—';
     }
   }
 }
 
-/// Aggregated attendance summary (for dashboard and stats)
+/// Aggregated attendance summary (for dashboard and stats).
+/// `absent` incluye `absent_with_presence` — así lo define DATABASE_SCHEMA.md
+/// (cuenta como ausente a efectos del RITE).
 class AttendanceSummary {
   const AttendanceSummary({
     required this.date,
     required this.present,
     required this.absent,
     required this.late,
-    required this.nonComputable,
+    required this.nonComputableAbsence,
     required this.earlyDepartures,
     required this.total,
   });
@@ -104,7 +94,7 @@ class AttendanceSummary {
   final int present;
   final int absent;
   final int late;
-  final int nonComputable;
+  final int nonComputableAbsence;
   final int earlyDepartures;
   final int total;
 

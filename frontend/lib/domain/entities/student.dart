@@ -8,10 +8,10 @@ class Student {
     required this.dni,
     required this.cursoId,
     required this.curso,
-    required this.especialidad,
-    required this.turno,
     required this.recursante,
     required this.porcentajeAsistencia,
+    this.workshopGroupId,
+    this.taller,
   });
 
   final String id;           // ULID
@@ -19,11 +19,11 @@ class Student {
   final String apellido;
   final String dni;
   final String cursoId;
-  final String curso;        // ej. "4° 2°"
-  final String especialidad; // ej. "Informática"
-  final String turno;        // "mañana" | "tarde" | "vespertino"
+  final String curso;        // ej. "4to 2da (2026)"
   final bool recursante;
   final double porcentajeAsistencia; // 0.0 – 100.0
+  final String? workshopGroupId; // grupo de taller — 1 solo, dentro de su curso
+  final String? taller;          // group_label legible, si tiene grupo asignado
 
   String get nombreCompleto => '$apellido, $nombre';
 
@@ -41,10 +41,11 @@ class Student {
     String? dni,
     String? cursoId,
     String? curso,
-    String? especialidad,
-    String? turno,
     bool? recursante,
     double? porcentajeAsistencia,
+    String? workshopGroupId,
+    bool clearWorkshopGroupId = false,
+    String? taller,
   }) {
     return Student(
       id:                    id                    ?? this.id,
@@ -53,10 +54,10 @@ class Student {
       dni:                   dni                   ?? this.dni,
       cursoId:               cursoId               ?? this.cursoId,
       curso:                 curso                 ?? this.curso,
-      especialidad:          especialidad          ?? this.especialidad,
-      turno:                 turno                 ?? this.turno,
       recursante:            recursante            ?? this.recursante,
       porcentajeAsistencia:  porcentajeAsistencia  ?? this.porcentajeAsistencia,
+      workshopGroupId: clearWorkshopGroupId ? null : (workshopGroupId ?? this.workshopGroupId),
+      taller:                taller                ?? this.taller,
     );
   }
 }
