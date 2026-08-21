@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+// ─── Layout ───────────────────────────────────────────────────────────────────
+/// Altura única de la franja superior — la usan tanto el header (AAMTopbar)
+/// como el bloque del logo en el sidebar, para que sus bordes inferiores
+/// queden en la misma coordenada Y y formen una sola línea continua.
+const double kHeaderHeight = 64.0;
+
 // ─── Tokens de color ──────────────────────────────────────────────────────────
 class AAMColors {
   // ── Paleta base ──
@@ -76,7 +82,7 @@ class AAMTopbar extends StatelessWidget {
       builder: (context, _) {
         final theme = AAMTheme();
         return Container(
-          height: 64,
+          height: kHeaderHeight,
           padding: const EdgeInsets.symmetric(horizontal: 32),
           decoration: BoxDecoration(
             color: theme.card,

@@ -1,54 +1,70 @@
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import time
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 from app.infrastructure.database import get_db
 from app.infrastructure.repositories.workshop_group_repository_impl import WorkshopGroupRepositoryImpl
+from app.infrastructure.repositories.time_slot_repository_impl import TimeSlotRepositoryImpl
+from app.domain.usecases.time_slot_usecases import GetTimeSlotsByWorkshopGroup
 
 
 class WorkshopGroupResponse(BaseModel):
-    id: int
-    name: str
+    id: str
+    course_id: str
+    group_label: str
 
     class Config:
         from_attributes = True
 
 
-class AddWorkshopGroupBody(BaseModel):
-    workshop_group_id: int
+class TimeSlotResponse(BaseModel):
+    id: str
+    course_id: Optional[str] = None
+    workshop_group_id: Optional[str] = None
+    shift: str
+    activity_type: str
+    day_of_week: int
+    start_time: time
+    end_time: time
+    late_tolerance_minutes: int
 
 
 router = APIRouter(tags=["workshop-groups"])
 
 
+def _to_response(w) -> WorkshopGroupResponse:
+    return WorkshopGroupResponse(
+        id=str(w.id), course_id=str(w.course_id), group_label=w.group_label,
+    )
+
+
 @router.get("/workshop-groups", response_model=List[WorkshopGroupResponse])
 def get_workshop_groups(db: Session = Depends(get_db)):
+    """Catálogo completo — sin filtrar por curso. Usado hoy por Horarios
+    (filtro independiente); Alumnos usa el endpoint scoped de abajo."""
     repo = WorkshopGroupRepositoryImpl(db)
-    return [WorkshopGroupResponse(id=w.id, name=w.name) for w in repo.get_all()]
+    return [_to_response(w) for w in repo.get_all()]
 
 
-@router.get("/students/{student_id}/workshop-groups", response_model=List[WorkshopGroupResponse])
-def get_student_workshop_groups(student_id: str, db: Session = Depends(get_db)):
+@router.get("/courses/{course_id}/workshop-groups", response_model=List[WorkshopGroupResponse])
+def get_workshop_groups_by_course(course_id: str, db: Session = Depends(get_db)):
+    """Grupos de taller de UN curso puntual — son una subdivisión interna
+    del curso, no se comparten entre cursos distintos."""
     repo = WorkshopGroupRepositoryImpl(db)
-    groups = repo.get_for_student(student_id)
-    if groups is None:
-        raise HTTPException(status_code=404, detail="Student not found")
-    return [WorkshopGroupResponse(id=w.id, name=w.name) for w in groups]
+    return [_to_response(w) for w in repo.get_by_course(course_id)]
 
 
-@router.post("/students/{student_id}/workshop-groups", response_model=List[WorkshopGroupResponse], status_code=201)
-def add_student_workshop_group(student_id: str, body: AddWorkshopGroupBody, db: Session = Depends(get_db)):
-    repo = WorkshopGroupRepositoryImpl(db)
-    ok = repo.add_to_student(student_id, body.workshop_group_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Student or workshop group not found")
-    return [WorkshopGroupResponse(id=w.id, name=w.name) for w in repo.get_for_student(student_id)]
-
-
-@router.delete("/students/{student_id}/workshop-groups/{workshop_group_id}", status_code=204)
-def remove_student_workshop_group(student_id: str, workshop_group_id: int, db: Session = Depends(get_db)):
-    repo = WorkshopGroupRepositoryImpl(db)
-    ok = repo.remove_from_student(student_id, workshop_group_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Student not found")
-    return None
+@router.get("/workshop-groups/{id}/time-slots", response_model=List[TimeSlotResponse])
+def get_workshop_group_time_slots(id: str, db: Session = Depends(get_db)):
+    repo = TimeSlotRepositoryImpl(db)
+    slots = GetTimeSlotsByWorkshopGroup(repo).execute(id)
+    return [
+        TimeSlotResponse(
+            id=s.id, course_id=s.course_id, workshop_group_id=s.workshop_group_id,
+            shift=s.shift, activity_type=s.activity_type, day_of_week=s.day_of_week,
+            start_time=s.start_time, end_time=s.end_time,
+            late_tolerance_minutes=s.late_tolerance_minutes,
+        )
+        for s in slots
+    ]

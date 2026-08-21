@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../widgets/aam_design_system.dart';
 import '../screens/dashboard_screen.dart';
-import '../screens/alumnos_screen.dart';
-import '../screens/asistencia_screen.dart';
-import '../screens/horarios_screen.dart';
-import '../screens/usuarios_screen.dart';
-import '../screens/reportes_screen.dart';
+import '../screens/students_screen.dart';
+import '../screens/attendance_screen.dart';
+import '../screens/cursos_screen.dart';
+import '../screens/users_screen.dart';
+import '../screens/reports_screen.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -22,7 +22,7 @@ class _AppShellState extends State<AppShell> {
     _NavItem(icon: Icons.dashboard_outlined,       label: 'Dashboard',     index: 0),
     _NavItem(icon: Icons.people_outline,           label: 'Alumnos',       index: 1),
     _NavItem(icon: Icons.fact_check_outlined,      label: 'Asistencia',    index: 2),
-    _NavItem(icon: Icons.schedule_outlined,        label: 'Horarios',      index: 3),
+    _NavItem(icon: Icons.school_outlined,          label: 'Cursos',        index: 3),
     _NavItem(icon: Icons.manage_accounts_outlined, label: 'Usuarios',      index: 4),
     _NavItem(icon: Icons.bar_chart_outlined,       label: 'Reportes',      index: 5),
     _NavItem(icon: Icons.settings_outlined,        label: 'Configuración', index: 6),
@@ -32,7 +32,7 @@ class _AppShellState extends State<AppShell> {
     0 => const DashboardScreen(),
     1 => const AlumnosScreen(),
     2 => const AsistenciaScreen(),
-    3 => const HorariosScreen(),
+    3 => const CursosScreen(),
     4 => const UsuariosScreen(),
     5 => const ReportesScreen(),
     6 => const _ConfiguracionPlaceholder(),
@@ -86,7 +86,9 @@ class _Sidebar extends StatelessWidget {
         children: [
           // Logo
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+            height: kHeaderHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            alignment: Alignment.centerLeft,
             decoration: BoxDecoration(
               border: Border(bottom: BorderSide(color: theme.borderCol, width: 1)),
             ),

@@ -1,56 +1,60 @@
 import enum
 from sqlalchemy import (
-    Column, String, SmallInteger, TIMESTAMP, Date, Time, ForeignKey,
-    CheckConstraint, Enum,
+    Column, String, SmallInteger, Integer, TIMESTAMP, Date, Time, ForeignKey,
+    CheckConstraint, UniqueConstraint, Enum,
 )
-from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.infrastructure.database import Base
 
 
+class ShiftTypeEnum(enum.Enum):
+    morning = "morning"
+    afternoon = "afternoon"
+    evening = "evening"
+
+
 class ActivityTypeEnum(enum.Enum):
-    regular        = "regular"          # turno principal
-    workshop       = "workshop"         # taller
-    extended_shift = "extended_shift"   # contraturno
+    main_shift = "main_shift"   # turno principal (curso)
+    workshop = "workshop"       # taller
+    after_shift = "after_shift"  # contraturno
 
 
-class ExceptionScopeEnum(enum.Enum):
-    single_day   = "single_day"
-    week         = "week"
-    custom_range = "custom_range"
+class TimeSlotModel(Base):
+    """Recurring weekly time slot for a course OR a workshop group — exactly
+    one of course_id / workshop_group_id is set, enforced by CHECK."""
+    __tablename__ = "time_slots"
 
-
-class ScheduleSlotModel(Base):
-    __tablename__ = "schedule_slots"
-
-    id                = Column(String(36), primary_key=True, server_default=func.gen_random_uuid())
-    course_id         = Column(String(36), ForeignKey("courses.id", ondelete="CASCADE"), nullable=False)
-    activity_type     = Column(Enum(ActivityTypeEnum, name="activity_type"), nullable=False,
-                               default=ActivityTypeEnum.regular)
-    day_of_week       = Column(SmallInteger, nullable=False)  # 1 = Monday
-    start_time        = Column(Time, nullable=False)
-    end_time          = Column(Time, nullable=False)
-    tolerance_minutes = Column(SmallInteger, nullable=False, default=0)
-
-    course = relationship("CourseModel", lazy="joined")
+    id                     = Column(String(36), primary_key=True, server_default=func.gen_random_uuid())
+    course_id              = Column(String(36), ForeignKey("courses.id", ondelete="CASCADE"), nullable=True)
+    workshop_group_id      = Column(String(36), ForeignKey("workshop_groups.id", ondelete="CASCADE"), nullable=True)
+    shift                  = Column(Enum(ShiftTypeEnum, name="shift_type"), nullable=False)
+    activity_type          = Column(Enum(ActivityTypeEnum, name="activity_type"), nullable=False,
+                                     default=ActivityTypeEnum.main_shift)
+    day_of_week            = Column(SmallInteger, nullable=False)  # ISO: 1 = Monday
+    start_time             = Column(Time, nullable=False)
+    end_time               = Column(Time, nullable=False)
+    late_tolerance_minutes = Column(Integer, nullable=False, default=0)
+    created_at             = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
     __table_args__ = (
-        CheckConstraint("day_of_week BETWEEN 1 AND 7", name="ck_schedule_slots_day_of_week"),
-        CheckConstraint("end_time > start_time", name="ck_schedule_slots_time_order"),
+        CheckConstraint("day_of_week BETWEEN 1 AND 7", name="ck_time_slots_day_of_week"),
+        CheckConstraint("end_time > start_time", name="ck_time_slots_time_order"),
+        CheckConstraint(
+            "(activity_type IN ('main_shift', 'after_shift') AND course_id IS NOT NULL AND workshop_group_id IS NULL)"
+            " OR (activity_type = 'workshop' AND workshop_group_id IS NOT NULL AND course_id IS NULL)",
+            name="ck_time_slots_course_xor_workshop",
+        ),
     )
 
 
 class ScheduleExceptionModel(Base):
+    """Single-day exception to a course's normal schedule. Never affects
+    attendance_rate."""
     __tablename__ = "schedule_exceptions"
 
     id             = Column(String(36), primary_key=True, server_default=func.gen_random_uuid())
     course_id      = Column(String(36), ForeignKey("courses.id", ondelete="CASCADE"), nullable=False)
-    scope          = Column(Enum(ExceptionScopeEnum, name="exception_scope"), nullable=False)
-    exception_date = Column(Date, nullable=True)   # scope = single_day
-    week_start     = Column(Date, nullable=True)   # scope = week
-    range_start    = Column(Date, nullable=True)   # scope = custom_range
-    range_end      = Column(Date, nullable=True)   # scope = custom_range
-    day_of_week    = Column(SmallInteger, nullable=True)
+    exception_date = Column(Date, nullable=False)
     start_time     = Column(Time, nullable=True)
     end_time       = Column(Time, nullable=True)
     reason         = Column(String(255), nullable=True)
@@ -58,5 +62,5 @@ class ScheduleExceptionModel(Base):
     created_at     = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
     __table_args__ = (
-        CheckConstraint("day_of_week BETWEEN 1 AND 7", name="ck_schedule_exceptions_day_of_week"),
+        UniqueConstraint("course_id", "exception_date", name="uq_schedule_exceptions_course_date"),
     )
