@@ -7,6 +7,7 @@ from app.infrastructure.repositories.course_repository_impl import CourseReposit
 from app.infrastructure.repositories.time_slot_repository_impl import TimeSlotRepositoryImpl
 from app.infrastructure.repositories.academic_repository_impl import CourseSubjectTeacherRepositoryImpl
 from app.infrastructure.repositories.class_period_repository_impl import ClassPeriodRepositoryImpl
+from app.infrastructure.repositories.workshop_group_repository_impl import WorkshopGroupRepositoryImpl
 from app.infrastructure.repositories.preceptor_assignment_repository_impl import (
     CoursePreceptorRepositoryImpl, CoursePreceptorTempAssignmentRepositoryImpl,
 )
@@ -86,7 +87,8 @@ class SubjectTeacherAssign(BaseModel):
 
 class ClassPeriodResponse(BaseModel):
     id: str
-    course_id: str
+    course_id: Optional[str] = None
+    workshop_group_id: Optional[str] = None
     day_of_week: int
     shift: str
     period_order: int
@@ -109,6 +111,9 @@ class ClassPeriodCreate(BaseModel):
     subject_id: Optional[str] = None
     teacher_id: Optional[str] = None
     is_fifth_module: bool = False
+    # None = curricular (compartido por todos los grupos). Si se pasa, el
+    # período queda scoped a ESE grupo de taller (debe pertenecer al curso).
+    workshop_group_id: Optional[str] = None
 
 
 class CoursePreceptorResponse(BaseModel):
@@ -228,7 +233,8 @@ def delete_course_time_slot(id: str, slot_id: str, db: Session = Depends(get_db)
 
 def _class_period_response(p) -> ClassPeriodResponse:
     return ClassPeriodResponse(
-        id=p.id, course_id=p.course_id, day_of_week=p.day_of_week, shift=p.shift,
+        id=p.id, course_id=p.course_id, workshop_group_id=p.workshop_group_id,
+        day_of_week=p.day_of_week, shift=p.shift,
         period_order=p.period_order, period_type=p.period_type,
         start_time=p.start_time, end_time=p.end_time, is_fifth_module=p.is_fifth_module,
         subject_id=p.subject_id, subject_name=p.subject_name,
@@ -245,11 +251,13 @@ def get_class_periods(id: str, db: Session = Depends(get_db)):
 @router.post("/{id}/class-periods", response_model=ClassPeriodResponse, status_code=201)
 def create_class_period(id: str, body: ClassPeriodCreate, db: Session = Depends(get_db)):
     repo = ClassPeriodRepositoryImpl(db)
+    workshop_group_repo = WorkshopGroupRepositoryImpl(db)
     try:
-        period = CreateClassPeriod(repo).execute(
+        period = CreateClassPeriod(repo, workshop_group_repo).execute(
             course_id=id, day_of_week=body.day_of_week, shift=body.shift, period_type=body.period_type,
             start_time=body.start_time, end_time=body.end_time,
             subject_id=body.subject_id, teacher_id=body.teacher_id, is_fifth_module=body.is_fifth_module,
+            workshop_group_id=body.workshop_group_id,
         )
     except ClassPeriodError as e:
         raise HTTPException(status_code=e.status_code, detail=str(e))

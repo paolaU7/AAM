@@ -2,6 +2,7 @@ from datetime import time
 from typing import List, Optional
 from app.domain.entities.class_period import ClassPeriod
 from app.domain.repositories.class_period_repository import ClassPeriodRepository
+from app.domain.repositories.workshop_group_repository import WorkshopGroupRepository
 
 
 class ClassPeriodError(Exception):
@@ -19,8 +20,9 @@ class GetClassPeriodsByCourse:
 
 
 class CreateClassPeriod:
-    def __init__(self, repo: ClassPeriodRepository):
+    def __init__(self, repo: ClassPeriodRepository, workshop_group_repo: WorkshopGroupRepository):
         self.repo = repo
+        self.workshop_group_repo = workshop_group_repo
 
     def execute(
         self,
@@ -34,6 +36,7 @@ class CreateClassPeriod:
         subject_id: Optional[str] = None,
         teacher_id: Optional[str] = None,
         is_fifth_module: bool = False,
+        workshop_group_id: Optional[str] = None,
     ) -> ClassPeriod:
         if day_of_week < 1 or day_of_week > 7:
             raise ClassPeriodError("day_of_week debe estar entre 1 y 7.", 400)
@@ -44,8 +47,16 @@ class CreateClassPeriod:
         if period_type in ("recess", "lunch") and (subject_id or teacher_id):
             raise ClassPeriodError("Recreo y almuerzo no llevan materia ni profesor.", 400)
 
+        if workshop_group_id:
+            grupos_del_curso = {g.id for g in self.workshop_group_repo.get_by_course(course_id)}
+            if workshop_group_id not in grupos_del_curso:
+                raise ClassPeriodError("El grupo de taller no pertenece a este curso.", 400)
+            scope = {"course_id": None, "workshop_group_id": workshop_group_id}
+        else:
+            scope = {"course_id": course_id, "workshop_group_id": None}
+
         return self.repo.create(
-            course_id=course_id, day_of_week=day_of_week, shift=shift, period_type=period_type,
+            **scope, day_of_week=day_of_week, shift=shift, period_type=period_type,
             start_time=start_time, end_time=end_time,
             subject_id=subject_id, teacher_id=teacher_id, is_fifth_module=is_fifth_module,
         )

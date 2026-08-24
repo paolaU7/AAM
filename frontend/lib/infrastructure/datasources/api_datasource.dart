@@ -214,6 +214,7 @@ class ApiDatasource {
     String? subjectId,
     String? teacherId,
     bool isFifthModule = false,
+    String? workshopGroupId,
   }) async {
     final body = {
       'day_of_week': dayOfWeek,
@@ -224,6 +225,7 @@ class ApiDatasource {
       if (subjectId != null) 'subject_id': subjectId,
       if (teacherId != null) 'teacher_id': teacherId,
       'is_fifth_module': isFifthModule,
+      if (workshopGroupId != null) 'workshop_group_id': workshopGroupId,
     };
     final response = await http
         .post(

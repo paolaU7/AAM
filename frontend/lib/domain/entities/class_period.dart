@@ -22,12 +22,16 @@ String periodTypeLabel(PeriodType t) => switch (t) {
       PeriodType.lunch => 'Almuerzo',
     };
 
-/// Un período del horario académico DETALLADO día por día de un curso —
-/// distinto de TimeSlot (que solo abre/cierra el turno de asistencia).
+/// Un período del horario académico DETALLADO día por día — distinto de
+/// TimeSlot (que solo abre/cierra el turno de asistencia). Exactamente uno
+/// de [courseId] / [workshopGroupId] está seteado: curricular (compartido
+/// por todos los grupos de taller del curso) o contraturno de UN grupo
+/// puntual.
 class ClassPeriod {
   const ClassPeriod({
     required this.id,
-    required this.courseId,
+    this.courseId,
+    this.workshopGroupId,
     required this.dayOfWeek,
     required this.shift,
     required this.periodOrder,
@@ -42,7 +46,8 @@ class ClassPeriod {
   });
 
   final String id;
-  final String courseId;
+  final String? courseId;
+  final String? workshopGroupId;
   final int dayOfWeek; // ISO 1..7
   final ShiftType shift;
   final int periodOrder;
@@ -57,7 +62,8 @@ class ClassPeriod {
 
   factory ClassPeriod.fromJson(Map<String, dynamic> json) => ClassPeriod(
         id: json['id'].toString(),
-        courseId: json['course_id'].toString(),
+        courseId: json['course_id']?.toString(),
+        workshopGroupId: json['workshop_group_id']?.toString(),
         dayOfWeek: (json['day_of_week'] as num).toInt(),
         shift: shiftTypeFromString(json['shift']),
         periodOrder: (json['period_order'] as num).toInt(),

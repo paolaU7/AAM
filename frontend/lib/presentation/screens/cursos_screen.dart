@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../domain/entities/course.dart';
+import '../../domain/entities/workshop_group.dart';
 import '../../domain/entities/time_slot.dart';
 import '../../domain/entities/class_period.dart';
 import '../../domain/entities/academic.dart';
@@ -81,12 +82,7 @@ class _CursosScreenState extends State<CursosScreen> {
 
   Widget _buildLista(AAMTheme theme) {
     return Column(children: [
-      AAMTopbar(
-        title: 'Cursos',
-        actions: [
-          AAMButton(label: 'Nuevo curso', icon: Icons.add, onPressed: _abrirNuevoCurso),
-        ],
-      ),
+      const AAMTopbar(title: 'Cursos'),
       Expanded(
         child: _loading
             ? const AAMLoadingScreen()
@@ -94,13 +90,13 @@ class _CursosScreenState extends State<CursosScreen> {
                 ? AAMErrorWidget(message: _error!, onRetry: _cargar)
                 : Padding(
                     padding: const EdgeInsets.all(32),
-                    child: _buildTable(theme),
+                    child: _buildGrid(theme),
                   ),
       ),
     ]);
   }
 
-  Widget _buildTable(AAMTheme theme) {
+  Widget _buildGrid(AAMTheme theme) {
     final cursos = [..._cursos]
       ..sort((a, b) {
         final byYear = b.academicYear.compareTo(a.academicYear);
@@ -109,86 +105,102 @@ class _CursosScreenState extends State<CursosScreen> {
         if (byGrade != 0) return byGrade;
         return a.division.compareTo(b.division);
       });
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.card,
-        border: Border.all(color: theme.borderCol),
-        borderRadius: BorderRadius.circular(16),
+    return SingleChildScrollView(
+      child: Wrap(
+        spacing: 16,
+        runSpacing: 16,
+        children: [
+          ...cursos.map((c) => _CursoCard(
+                curso: c,
+                theme: theme,
+                onTap: () => setState(() => _seleccionado = c),
+              )),
+          _NuevoCursoCard(theme: theme, onTap: _abrirNuevoCurso),
+        ],
       ),
-      child: Column(children: [
-        const AAMTableHeader(columns: [
-          ('Curso', 3),
-          ('Año lectivo', 2),
-          ('Especialidad', 2),
-          ('Alumnos', 2),
-          ('', 1),
-        ]),
-        Expanded(
-          child: cursos.isEmpty
-              ? Center(
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.school_outlined, size: 44, color: theme.borderCol),
-                    const SizedBox(height: 14),
-                    Text('No hay cursos cargados aún',
-                        style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec)),
-                    const SizedBox(height: 8),
-                    AAMButton(label: 'Crear primer curso', onPressed: _abrirNuevoCurso),
-                  ]),
-                )
-              : ListView.builder(
-                  itemCount: cursos.length,
-                  itemBuilder: (ctx, i) => _CursoRow(
-                    curso: cursos[i],
-                    theme: theme,
-                    onTap: () => setState(() => _seleccionado = cursos[i]),
-                  ),
-                ),
-        ),
-      ]),
     );
   }
 }
 
-class _CursoRow extends StatefulWidget {
-  const _CursoRow({required this.curso, required this.theme, required this.onTap});
+class _CursoCard extends StatefulWidget {
+  const _CursoCard({required this.curso, required this.theme, required this.onTap});
   final Course curso;
   final AAMTheme theme;
   final VoidCallback onTap;
 
   @override
-  State<_CursoRow> createState() => _CursoRowState();
+  State<_CursoCard> createState() => _CursoCardState();
 }
 
-class _CursoRowState extends State<_CursoRow> {
+class _CursoCardState extends State<_CursoCard> {
   bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
     final curso = widget.curso;
+    final avatarSeed = curso.specialty ?? curso.name;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: widget.onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          width: 240,
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: _hovered ? theme.surfaceCol : Colors.transparent,
-            border: Border(bottom: BorderSide(color: theme.borderCol, width: 1)),
+            color: theme.card,
+            border: Border.all(color: _hovered ? AAMColors.accent : theme.borderCol),
+            borderRadius: BorderRadius.circular(16),
           ),
-          child: Row(children: [
-            Expanded(flex: 3, child: Text(curso.name,
-                style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600, color: theme.text))),
-            Expanded(flex: 2, child: Text('${curso.academicYear}',
-                style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec))),
-            Expanded(flex: 2, child: Text(curso.specialty ?? '—',
-                style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec))),
-            Expanded(flex: 2, child: Text('${curso.totalStudents}',
-                style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec))),
-            Expanded(flex: 1, child: Icon(Icons.chevron_right, size: 18, color: theme.textSec)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              _InitialsAvatar(text: avatarSeed, color: avatarColorFor(avatarSeed)),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(curso.name, style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700, color: theme.text)),
+                Text('Año lectivo ${curso.academicYear}', style: GoogleFonts.dmSans(fontSize: 11, color: theme.textSec)),
+              ])),
+            ]),
+            const SizedBox(height: 12),
+            if (curso.specialty != null) AAMBadge(label: curso.specialty!, color: AAMColors.accent),
+            const SizedBox(height: 12),
+            Divider(height: 1, color: theme.borderCol),
+            const SizedBox(height: 10),
+            Text('${curso.totalStudents} alumnos', style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec)),
           ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _NuevoCursoCard extends StatelessWidget {
+  const _NuevoCursoCard({required this.theme, required this.onTap});
+  final AAMTheme theme;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: CustomPaint(
+          painter: _DashedRRectPainter(color: AAMColors.accent, radius: 16),
+          child: SizedBox(
+            width: 240,
+            height: 132,
+            child: Center(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.add, size: 20, color: AAMColors.accent),
+                const SizedBox(height: 6),
+                Text('Nuevo curso', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: AAMColors.accent)),
+              ]),
+            ),
+          ),
         ),
       ),
     );
@@ -493,10 +505,18 @@ class _TabHorarioState extends State<_TabHorario> {
   late final TimeSlotRepositoryImpl _timeSlotRepo;
 
   List<TimeSlot> _turnoPrincipal = [];
+  // Curriculares (workshopGroupId null) + contraturno de TODOS los grupos
+  // de taller del curso — el backend ya los combina en una sola respuesta.
   List<ClassPeriod> _detallado = [];
   List<SubjectTeacherAssignment> _materiasCurso = [];
+  List<WorkshopGroup> _grupos = [];
+  List<Teacher> _profesores = [];
   bool _loading = true;
   String? _error;
+
+  // Qué grupo de taller se muestra en la grilla (la parte curricular de la
+  // mañana es la misma para todos, no se repite por solapa).
+  int _grupoTabIndex = 0;
 
   @override
   void initState() {
@@ -515,12 +535,17 @@ class _TabHorarioState extends State<_TabHorario> {
         _timeSlotRepo.getTimeSlotsByCourse(widget.curso.id),
         widget.ds.getClassPeriods(widget.curso.id),
         widget.ds.getCourseSubjectTeachers(widget.curso.id),
+        widget.ds.getWorkshopGroupsByCourse(widget.curso.id),
+        widget.ds.getTeachers(),
       ]);
       if (!mounted) return;
       setState(() {
         _turnoPrincipal = results[0] as List<TimeSlot>;
         _detallado = results[1] as List<ClassPeriod>;
         _materiasCurso = results[2] as List<SubjectTeacherAssignment>;
+        _grupos = results[3] as List<WorkshopGroup>;
+        _profesores = results[4] as List<Teacher>;
+        if (_grupoTabIndex >= _grupos.length) _grupoTabIndex = 0;
       });
     } catch (_) {
       if (mounted) setState(() => _error = 'No se pudo cargar el horario del curso.');
@@ -559,7 +584,13 @@ class _TabHorarioState extends State<_TabHorario> {
     final result = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
-      builder: (_) => _NuevoPeriodoForm(ds: widget.ds, courseId: widget.curso.id, materias: _materiasCurso),
+      builder: (_) => _NuevoPeriodoForm(
+        ds: widget.ds,
+        courseId: widget.curso.id,
+        materias: _materiasCurso,
+        grupos: _grupos,
+        profesores: _profesores,
+      ),
     );
     if (result == true) _cargar();
   }
@@ -588,12 +619,12 @@ class _TabHorarioState extends State<_TabHorario> {
         if (byDay != 0) return byDay;
         return a.startTime.compareTo(b.startTime);
       });
-    final detallado = [..._detallado]
-      ..sort((a, b) {
-        final byDay = a.dayOfWeek.compareTo(b.dayOfWeek);
-        if (byDay != 0) return byDay;
-        return a.periodOrder.compareTo(b.periodOrder);
-      });
+
+    final curriculares = _detallado.where((p) => p.workshopGroupId == null).toList();
+    final contraturnoActivo = _grupos.isEmpty
+        ? <ClassPeriod>[]
+        : _detallado.where((p) => p.workshopGroupId == _grupos[_grupoTabIndex].id).toList();
+    final periodosGrilla = [...curriculares, ...contraturnoActivo];
 
     return SingleChildScrollView(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -601,19 +632,40 @@ class _TabHorarioState extends State<_TabHorario> {
           Text(_error!, style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.danger)),
           const SizedBox(height: 16),
         ],
-        _SectionCard(theme: theme, title: 'Turno principal', action: AAMButton(label: 'Agregar franja', icon: Icons.add, onPressed: _agregarFranja), children: [
-          if (turno.isEmpty)
-            _EmptyRow(theme: theme, mensaje: 'Sin franjas horarias cargadas.')
-          else
-            ...turno.map((s) => _FranjaRow(slot: s, theme: theme, onDelete: () => _eliminarFranja(s))),
+        Row(children: [
+          Expanded(child: Text('Turno principal', style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700, color: theme.text))),
+          _DashedButton(label: 'Agregar franja', onTap: _agregarFranja),
         ]),
-        const SizedBox(height: 24),
-        _SectionCard(theme: theme, title: 'Horario detallado', action: AAMButton(label: 'Agregar período', icon: Icons.add, onPressed: _agregarPeriodo), children: [
-          if (detallado.isEmpty)
-            _EmptyRow(theme: theme, mensaje: 'Sin horario detallado cargado.')
-          else
-            ...detallado.map((p) => _PeriodoRow(periodo: p, theme: theme, onDelete: () => _eliminarPeriodo(p))),
+        const SizedBox(height: 12),
+        if (turno.isEmpty)
+          _EmptyRow(theme: theme, mensaje: 'Sin franjas horarias cargadas.')
+        else
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(color: theme.card, border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(12)),
+            child: Column(children: turno.map((s) => _FranjaRow(slot: s, theme: theme, onDelete: () => _eliminarFranja(s))).toList()),
+          ),
+        const SizedBox(height: 28),
+        Row(children: [
+          Expanded(child: Text('Horario detallado', style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700, color: theme.text))),
+          _DashedButton(label: 'Agregar período', onTap: _agregarPeriodo),
         ]),
+        const SizedBox(height: 12),
+        if (_grupos.isNotEmpty) ...[
+          Row(children: List.generate(_grupos.length, (i) => Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: _TabChip(
+              label: 'Grupo ${_grupos[i].name}',
+              selected: _grupoTabIndex == i,
+              theme: theme,
+              onTap: () => setState(() => _grupoTabIndex = i),
+            ),
+          ))),
+          const SizedBox(height: 12),
+        ],
+        _HorarioGrilla(periodos: periodosGrilla, materiasCurso: _materiasCurso, theme: theme, onDeletePeriodo: _eliminarPeriodo),
+        const SizedBox(height: 12),
+        _LeyendaHorario(theme: theme),
       ]),
     );
   }
@@ -645,37 +697,203 @@ class _FranjaRow extends StatelessWidget {
   }
 }
 
-class _PeriodoRow extends StatelessWidget {
-  const _PeriodoRow({required this.periodo, required this.theme, required this.onDelete});
-  final ClassPeriod periodo;
+/// Grilla semanal del horario detallado: cada bloque muestra la materia real
+/// y el profesor a cargo (nunca un bloque genérico). Curriculares +
+/// contraturno del grupo de taller activo, ya combinados por el caller.
+class _HorarioGrilla extends StatelessWidget {
+  const _HorarioGrilla({required this.periodos, required this.materiasCurso, required this.theme, required this.onDeletePeriodo});
+  final List<ClassPeriod> periodos;
+  final List<SubjectTeacherAssignment> materiasCurso;
   final AAMTheme theme;
-  final VoidCallback onDelete;
+  final ValueChanged<ClassPeriod> onDeletePeriodo;
+
+  static const List<String> _dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+
+  bool _esSuplente(ClassPeriod p) {
+    if (p.periodType != PeriodType.lesson || p.teacherId == null || p.subjectId == null) return false;
+    SubjectTeacherAssignment? titular;
+    try {
+      titular = materiasCurso.firstWhere((m) => m.subjectId == p.subjectId);
+    } catch (_) {
+      return false;
+    }
+    return titular.teacherId != p.teacherId;
+  }
+
+  List<(ClockTime, ClockTime)> get _franjas {
+    final set = <(ClockTime, ClockTime)>{};
+    for (final p in periodos) {
+      set.add((p.startTime, p.endTime));
+    }
+    final list = set.toList()..sort((a, b) => a.$1.compareTo(b.$1));
+    return list;
+  }
+
+  List<ClassPeriod> _en(int dayOfWeek, ClockTime start, ClockTime end) => periodos
+      .where((p) => p.dayOfWeek == dayOfWeek && p.startTime == start && p.endTime == end)
+      .toList();
 
   @override
   Widget build(BuildContext context) {
-    final esClase = periodo.periodType == PeriodType.lesson;
+    final franjas = _franjas;
+    if (franjas.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        decoration: BoxDecoration(color: theme.card, border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(16)),
+        child: Center(child: Text('Sin horario detallado cargado.', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec))),
+      );
+    }
+
+    const double colW = 160;
+    const double hdrH = 40;
+
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: theme.borderCol, width: 1))),
-      child: Row(children: [
-        SizedBox(width: 90, child: Text(_diaLabel(periodo.dayOfWeek), style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: theme.text))),
-        SizedBox(width: 130, child: Text('${periodo.startTime.label} – ${periodo.endTime.label}', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec))),
-        SizedBox(width: 90, child: AAMBadge(
-          label: periodTypeLabel(periodo.periodType),
-          color: esClase ? AAMColors.primary : (periodo.periodType == PeriodType.lunch ? AAMColors.warning : AAMColors.slate),
-        )),
-        const SizedBox(width: 12),
-        Expanded(child: Text(
-          esClase ? '${periodo.subjectName ?? '—'}${periodo.teacherName != null ? ' · ${periodo.teacherName}' : ''}' : '',
-          style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
-        )),
-        if (periodo.isFifthModule) ...[
-          const AAMBadge(label: '5to módulo', color: AAMColors.violet),
-          const SizedBox(width: 12),
-        ],
-        GestureDetector(onTap: onDelete, child: const Icon(Icons.delete_outline, size: 18, color: AAMColors.danger)),
+      decoration: BoxDecoration(color: theme.card, border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(16)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            width: 60 + colW * _dias.length,
+            child: Column(children: [
+              Container(
+                height: hdrH,
+                color: theme.surfaceCol,
+                child: Row(children: [
+                  const SizedBox(width: 60),
+                  ..._dias.map((d) => SizedBox(
+                        width: colW,
+                        child: Center(child: Text(d, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: theme.text))),
+                      )),
+                ]),
+              ),
+              Divider(height: 1, color: theme.borderCol),
+              ...franjas.map((franja) {
+                final (start, end) = franja;
+                return Container(
+                  decoration: BoxDecoration(border: Border(bottom: BorderSide(color: theme.borderCol, width: 1))),
+                  child: IntrinsicHeight(
+                    child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      SizedBox(width: 60, child: Center(child: Text(start.label, style: GoogleFonts.dmSans(fontSize: 10, color: theme.textSec)))),
+                      for (var dow = 1; dow <= _dias.length; dow++)
+                        SizedBox(width: colW, child: _celda(_en(dow, start, end))),
+                    ]),
+                  ),
+                );
+              }),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _celda(List<ClassPeriod> periodosCelda) {
+    if (periodosCelda.isEmpty) return const SizedBox.shrink();
+    return Column(children: periodosCelda.map(_celdaPeriodo).toList());
+  }
+
+  Widget _celdaPeriodo(ClassPeriod p) {
+    return GestureDetector(
+      onTap: () => onDeletePeriodo(p),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: switch (p.periodType) {
+          PeriodType.recess => _celdaDashed('Recreo'),
+          PeriodType.lunch => _celdaDashed('Almuerzo'),
+          PeriodType.lesson => _celdaClase(p),
+        },
+      ),
+    );
+  }
+
+  Widget _celdaDashed(String label) {
+    return Container(
+      margin: const EdgeInsets.all(4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: CustomPaint(
+        painter: _DashedRRectPainter(color: theme.borderCol, radius: 8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          alignment: Alignment.center,
+          child: Text(label, style: GoogleFonts.dmSans(fontSize: 11, color: theme.textSec)),
+        ),
+      ),
+    );
+  }
+
+  Widget _celdaClase(ClassPeriod p) {
+    final suplente = _esSuplente(p);
+    final esTaller = p.workshopGroupId != null;
+    final acento = esTaller ? AAMColors.teal : AAMColors.primary;
+    return Container(
+      margin: const EdgeInsets.all(4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: esTaller ? acento.withAlpha((0.16 * 255).round()) : acento.withAlpha((0.06 * 255).round()),
+        border: Border.all(color: p.isFifthModule ? AAMColors.violet : acento, width: p.isFifthModule ? 2 : 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        Text(p.subjectName ?? '—',
+            style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: theme.text), overflow: TextOverflow.ellipsis),
+        Text(
+          'Prof. ${p.teacherName ?? '—'}${suplente ? ' (suplente)' : ''}',
+          style: GoogleFonts.dmSans(fontSize: 10, color: theme.textSec, fontStyle: suplente ? FontStyle.italic : FontStyle.normal),
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (p.isFifthModule)
+          Text('5to módulo', style: GoogleFonts.dmSans(fontSize: 9, fontWeight: FontWeight.w700, color: AAMColors.violet)),
       ]),
     );
+  }
+}
+
+class _LeyendaHorario extends StatelessWidget {
+  const _LeyendaHorario({required this.theme});
+  final AAMTheme theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(spacing: 16, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+      _swatch(AAMColors.primary, 'Curricular', outlined: true),
+      _swatch(AAMColors.teal, 'Taller (contraturno)'),
+      _swatchDashed('Recreo / Almuerzo'),
+      _swatchDot(AAMColors.violet, '5to módulo'),
+      Text('Prof. (suplente) = reemplazo temporal',
+          style: GoogleFonts.dmSans(fontSize: 11, fontStyle: FontStyle.italic, color: theme.textSec)),
+    ]);
+  }
+
+  Widget _swatch(Color color, String label, {bool outlined = false}) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Container(
+        width: 14, height: 14,
+        decoration: BoxDecoration(
+          color: outlined ? Colors.transparent : color.withAlpha((0.25 * 255).round()),
+          border: Border.all(color: color, width: outlined ? 1.5 : 1),
+          borderRadius: BorderRadius.circular(3),
+        ),
+      ),
+      const SizedBox(width: 6),
+      Text(label, style: GoogleFonts.dmSans(fontSize: 11, color: theme.textSec)),
+    ]);
+  }
+
+  Widget _swatchDashed(String label) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      SizedBox(width: 14, height: 14, child: CustomPaint(painter: _DashedRRectPainter(color: theme.textSec, radius: 3))),
+      const SizedBox(width: 6),
+      Text(label, style: GoogleFonts.dmSans(fontSize: 11, color: theme.textSec)),
+    ]);
+  }
+
+  Widget _swatchDot(Color color, String label) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+      const SizedBox(width: 6),
+      Text(label, style: GoogleFonts.dmSans(fontSize: 11, color: theme.textSec)),
+    ]);
   }
 }
 
@@ -800,10 +1018,18 @@ class _NuevaFranjaFormState extends State<_NuevaFranjaForm> {
 
 // ─── Alta de período (horario detallado) ────────────────────────────────────
 class _NuevoPeriodoForm extends StatefulWidget {
-  const _NuevoPeriodoForm({required this.ds, required this.courseId, required this.materias});
+  const _NuevoPeriodoForm({
+    required this.ds,
+    required this.courseId,
+    required this.materias,
+    required this.grupos,
+    required this.profesores,
+  });
   final ApiDatasource ds;
   final String courseId;
   final List<SubjectTeacherAssignment> materias;
+  final List<WorkshopGroup> grupos;
+  final List<Teacher> profesores;
 
   @override
   State<_NuevoPeriodoForm> createState() => _NuevoPeriodoFormState();
@@ -817,6 +1043,9 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
   ClockTime? _end;
   bool _quintoModulo = false;
   SubjectTeacherAssignment? _materiaSel;
+  Teacher? _profesorSel;
+  // null = curricular (compartido por todos los grupos).
+  WorkshopGroup? _grupoSel;
 
   bool _submitting = false;
   String? _error;
@@ -829,6 +1058,21 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
   Future<void> _pickEnd() async {
     final t = await _pickTime(context, _end);
     if (t != null) setState(() => _end = t);
+  }
+
+  void _onMateriaChanged(SubjectTeacherAssignment? m) {
+    setState(() {
+      _materiaSel = m;
+      if (m == null) {
+        _profesorSel = null;
+        return;
+      }
+      try {
+        _profesorSel = widget.profesores.firstWhere((p) => p.id == m.teacherId);
+      } catch (_) {
+        _profesorSel = null;
+      }
+    });
   }
 
   Future<void> _submit() async {
@@ -844,8 +1088,8 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
       setState(() => _error = 'El horario de fin debe ser posterior al de inicio.');
       return;
     }
-    if (_periodType == PeriodType.lesson && _materiaSel == null) {
-      setState(() => _error = 'Seleccioná la materia.');
+    if (_periodType == PeriodType.lesson && (_materiaSel == null || _profesorSel == null)) {
+      setState(() => _error = 'Seleccioná la materia y el profesor a cargo.');
       return;
     }
     setState(() {
@@ -861,8 +1105,9 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
         startTime: _start!,
         endTime: _end!,
         subjectId: _periodType == PeriodType.lesson ? _materiaSel!.subjectId : null,
-        teacherId: _periodType == PeriodType.lesson ? _materiaSel!.teacherId : null,
+        teacherId: _periodType == PeriodType.lesson ? _profesorSel!.id : null,
         isFifthModule: _quintoModulo,
+        workshopGroupId: _grupoSel?.id,
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -885,6 +1130,16 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
       onSubmit: _submit,
       submitLabel: 'Crear período',
       children: [
+        if (widget.grupos.isNotEmpty) ...[
+          _DropdownGroup<WorkshopGroup?>(
+            label: 'Alcance',
+            value: _grupoSel,
+            options: <WorkshopGroup?>[null, ...widget.grupos],
+            itemLabel: (g) => g == null ? 'Curricular (todo el curso)' : 'Grupo ${g.name} (contraturno)',
+            onChanged: (v) => setState(() => _grupoSel = v),
+          ),
+          const SizedBox(height: 16),
+        ],
         Row(children: [
           Expanded(child: _DropdownGroup<int>(
             label: 'Día', value: _dayOfWeek, options: const [1, 2, 3, 4, 5, 6, 7],
@@ -904,7 +1159,10 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
           itemLabel: periodTypeLabel,
           onChanged: (v) => setState(() {
             _periodType = v!;
-            if (_periodType != PeriodType.lesson) _materiaSel = null;
+            if (_periodType != PeriodType.lesson) {
+              _materiaSel = null;
+              _profesorSel = null;
+            }
           }),
         ),
         const SizedBox(height: 16),
@@ -921,7 +1179,16 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
             options: widget.materias,
             hint: 'Materia',
             itemLabel: (m) => '${m.subjectName} (${m.teacherName})',
-            onChanged: (v) => setState(() => _materiaSel = v),
+            onChanged: _onMateriaChanged,
+          ),
+          const SizedBox(height: 16),
+          _DropdownGroup<Teacher>(
+            label: 'Profesor a cargo (cambiá acá si es un reemplazo puntual)',
+            value: _profesorSel,
+            options: widget.profesores,
+            hint: 'Profesor',
+            itemLabel: (p) => p.fullName,
+            onChanged: (v) => setState(() => _profesorSel = v),
           ),
         ],
         const SizedBox(height: 16),
@@ -1003,12 +1270,13 @@ class _TabMateriasState extends State<_TabMaterias> {
           Text(_error!, style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.danger)),
           const SizedBox(height: 16),
         ],
-        _SectionCard(theme: theme, title: 'Materias del curso', action: AAMButton(label: 'Asignar materia', icon: Icons.add, onPressed: _asignar), children: [
-          if (_asignaciones.isEmpty)
-            _EmptyRow(theme: theme, mensaje: 'Sin materias asignadas todavía.')
-          else
-            ..._asignaciones.map((a) => _MateriaRow(asignacion: a, theme: theme, onDelete: () => _quitar(a))),
-        ]),
+        Text('Materias del curso', style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700, color: theme.text)),
+        const SizedBox(height: 16),
+        ..._asignaciones.map((a) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _MateriaRow(asignacion: a, theme: theme, onDelete: () => _quitar(a)),
+            )),
+        _DashedAddRow(label: 'Asignar materia', onTap: _asignar),
       ]),
     );
   }
@@ -1027,12 +1295,17 @@ class _MateriaRow extends StatelessWidget {
       if (asignacion.teacherPhone != null && asignacion.teacherPhone!.isNotEmpty) asignacion.teacherPhone,
     ].join(' · ');
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: theme.borderCol, width: 1))),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(color: theme.surfaceCol, borderRadius: BorderRadius.circular(12)),
       child: Row(children: [
-        Expanded(flex: 2, child: Text(asignacion.subjectName, style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600, color: theme.text))),
-        Expanded(flex: 2, child: Text(asignacion.teacherName, style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec))),
-        Expanded(flex: 3, child: Text(contacto.isEmpty ? '—' : contacto, style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec))),
+        _InitialsAvatar(text: asignacion.subjectName, color: avatarColorFor(asignacion.subjectName), size: 36),
+        const SizedBox(width: 14),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(asignacion.subjectName, style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: theme.text)),
+          Text('Prof. ${asignacion.teacherName}', style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec)),
+        ])),
+        Text(contacto, style: GoogleFonts.dmSans(fontSize: 11, color: theme.textSec), textAlign: TextAlign.right),
+        const SizedBox(width: 12),
         GestureDetector(onTap: onDelete, child: const Icon(Icons.delete_outline, size: 18, color: AAMColors.danger)),
       ]),
     );
@@ -1361,33 +1634,42 @@ class _TabPreceptoresState extends State<_TabPreceptores> {
           Text(_error!, style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.danger)),
           const SizedBox(height: 16),
         ],
-        _SectionCard(theme: theme, title: 'Preceptor permanente por turno', children: [
-          if (_turnosDelCurso.isEmpty)
-            _EmptyRow(theme: theme, mensaje: 'Cargá el turno principal del curso para poder asignar preceptores.')
-          else
-            ..._turnosDelCurso.map((shift) {
-              CoursePreceptor? actual;
-              try {
-                actual = _permanentes.firstWhere((p) => p.shift == shift);
-              } catch (_) {
-                actual = null;
-              }
-              return _PreceptorPermanenteRow(
+        Text('PERMANENTE POR TURNO', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w700, color: theme.textSec, letterSpacing: 0.6)),
+        const SizedBox(height: 10),
+        if (_turnosDelCurso.isEmpty)
+          _EmptyRow(theme: theme, mensaje: 'Cargá el turno principal del curso para poder asignar preceptores.')
+        else
+          ..._turnosDelCurso.map((shift) {
+            CoursePreceptor? actual;
+            try {
+              actual = _permanentes.firstWhere((p) => p.shift == shift);
+            } catch (_) {
+              actual = null;
+            }
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _PreceptorPermanenteRow(
                 shift: shift,
                 actual: actual,
                 theme: theme,
                 onAsignar: () => _asignarPermanente(shift),
                 onQuitar: actual == null ? null : () => _quitarPermanente(shift),
-              );
-            }),
+              ),
+            );
+          }),
+        const SizedBox(height: 28),
+        Row(children: [
+          Expanded(child: Text('REEMPLAZOS TEMPORALES', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w700, color: theme.textSec, letterSpacing: 0.6))),
+          _DashedButton(label: 'Agregar', onTap: _agregarTemporal),
         ]),
-        const SizedBox(height: 24),
-        _SectionCard(theme: theme, title: 'Reemplazos temporales', action: AAMButton(label: 'Agregar reemplazo', icon: Icons.add, onPressed: _agregarTemporal), children: [
-          if (_temporales.isEmpty)
-            _EmptyRow(theme: theme, mensaje: 'Sin reemplazos temporales cargados.')
-          else
-            ..._temporales.map((t) => _ReemplazoRow(asignacion: t, theme: theme, onDelete: () => _eliminarTemporal(t))),
-        ]),
+        const SizedBox(height: 10),
+        if (_temporales.isEmpty)
+          _EmptyRow(theme: theme, mensaje: 'Sin reemplazos temporales cargados.')
+        else
+          ..._temporales.map((t) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _ReemplazoRow(asignacion: t, theme: theme, onDelete: () => _eliminarTemporal(t)),
+              )),
       ]),
     );
   }
@@ -1404,13 +1686,20 @@ class _PreceptorPermanenteRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: theme.borderCol, width: 1))),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(color: theme.surfaceCol, borderRadius: BorderRadius.circular(12)),
       child: Row(children: [
-        SizedBox(width: 100, child: AAMBadge(label: shiftTypeLabel(shift), color: AAMColors.info)),
-        Expanded(child: Text(actual?.preceptorName ?? 'Sin asignar',
-            style: GoogleFonts.dmSans(fontSize: 14, color: actual == null ? theme.textSec : theme.text))),
-        AAMButton(label: actual == null ? 'Asignar' : 'Cambiar', outlined: true, onPressed: onAsignar),
+        _InitialsAvatar(text: actual?.preceptorName ?? '?', color: avatarColorFor(actual?.preceptorName ?? shift.name), size: 36),
+        const SizedBox(width: 14),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(actual?.preceptorName ?? 'Sin asignar',
+              style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: actual == null ? theme.textSec : theme.text)),
+          Text(actual == null ? 'Sin preceptor a cargo' : 'A cargo desde el inicio del año lectivo',
+              style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec)),
+        ])),
+        AAMBadge(label: shiftTypeLabel(shift), color: AAMColors.info),
+        const SizedBox(width: 12),
+        GestureDetector(onTap: onAsignar, child: Icon(actual == null ? Icons.add_circle_outline : Icons.edit_outlined, size: 18, color: AAMColors.accent)),
         if (onQuitar != null) ...[
           const SizedBox(width: 10),
           GestureDetector(onTap: onQuitar, child: const Icon(Icons.delete_outline, size: 18, color: AAMColors.danger)),
@@ -1426,19 +1715,43 @@ class _ReemplazoRow extends StatelessWidget {
   final AAMTheme theme;
   final VoidCallback onDelete;
 
-  String _fecha(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+  String _fecha(DateTime d) => '${d.day.toString().padLeft(2, '0')} ${_mes(d.month)}';
+  String _mes(int m) => const ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'][m - 1];
 
   @override
   Widget build(BuildContext context) {
+    final total = addOneCalendarMonth(asignacion.startDate).difference(asignacion.startDate).inMinutes;
+    final elapsed = asignacion.endDate.difference(asignacion.startDate).inMinutes;
+    final progreso = total <= 0 ? 1.0 : (elapsed / total).clamp(0.0, 1.0);
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: theme.borderCol, width: 1))),
-      child: Row(children: [
-        SizedBox(width: 100, child: AAMBadge(label: shiftTypeLabel(asignacion.shift), color: AAMColors.info)),
-        Expanded(flex: 2, child: Text(asignacion.preceptorName, style: GoogleFonts.dmSans(fontSize: 14, color: theme.text))),
-        Expanded(flex: 2, child: Text('${_fecha(asignacion.startDate)} – ${_fecha(asignacion.endDate)}', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec))),
-        Expanded(flex: 2, child: Text(asignacion.reason ?? '—', style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec))),
-        GestureDetector(onTap: onDelete, child: const Icon(Icons.delete_outline, size: 18, color: AAMColors.danger)),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(color: theme.surfaceCol, borderRadius: BorderRadius.circular(12)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          _InitialsAvatar(text: asignacion.preceptorName, color: avatarColorFor(asignacion.preceptorName), size: 36),
+          const SizedBox(width: 14),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(asignacion.preceptorName, style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: theme.text)),
+            Text(
+              '${asignacion.reason?.isNotEmpty == true ? '${asignacion.reason} · ' : ''}${shiftTypeLabel(asignacion.shift)}',
+              style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec),
+            ),
+          ])),
+          GestureDetector(onTap: onDelete, child: const Icon(Icons.delete_outline, size: 18, color: AAMColors.danger)),
+        ]),
+        const SizedBox(height: 12),
+        Row(children: [
+          Text(_fecha(asignacion.startDate), style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w700, color: theme.textSec)),
+          const SizedBox(width: 8),
+          Expanded(child: ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(value: progreso, minHeight: 6, color: AAMColors.accent, backgroundColor: theme.borderCol),
+          )),
+          const SizedBox(width: 8),
+          Text(_fecha(asignacion.endDate), style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w700, color: theme.textSec)),
+        ]),
+        const SizedBox(height: 4),
+        Center(child: Text('Máximo permitido: 1 mes', style: GoogleFonts.dmSans(fontSize: 10, color: theme.textSec))),
       ]),
     );
   }
@@ -1864,6 +2177,121 @@ class _TabChip extends StatelessWidget {
           fontSize: 13, fontWeight: FontWeight.w600,
           color: selected ? AAMColors.white : theme.textSec,
         )),
+      ),
+    );
+  }
+}
+
+// ─── Avatar de iniciales (paleta reciclada de AAMColors, sin hex nuevos) ────
+const List<Color> _avatarPalette = [
+  AAMColors.accent, AAMColors.primary, AAMColors.violet,
+  AAMColors.teal, AAMColors.indigo, AAMColors.slate,
+];
+Color avatarColorFor(String seed) => _avatarPalette[seed.hashCode.abs() % _avatarPalette.length];
+
+class _InitialsAvatar extends StatelessWidget {
+  const _InitialsAvatar({required this.text, required this.color, this.size = 40});
+  final String text;
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size, height: size,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      alignment: Alignment.center,
+      child: Text(text.isEmpty ? '?' : text[0].toUpperCase(),
+          style: GoogleFonts.dmSans(fontSize: size * 0.4, fontWeight: FontWeight.w700, color: AAMColors.white)),
+    );
+  }
+}
+
+// ─── Borde punteado (afordancia de "agregar", según mockups) ───────────────
+class _DashedRRectPainter extends CustomPainter {
+  _DashedRRectPainter({required this.color, required this.radius});
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rrect = RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius));
+    final dashPath = Path();
+    const dashWidth = 6.0;
+    const dashSpace = 4.0;
+    for (final metric in (Path()..addRRect(rrect)).computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final next = distance + dashWidth;
+        dashPath.addPath(metric.extractPath(distance, next.clamp(0, metric.length)), Offset.zero);
+        distance = next + dashSpace;
+      }
+    }
+    canvas.drawPath(dashPath, Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5);
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedRRectPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.radius != radius;
+}
+
+/// Pill compacta con borde punteado, para acciones "+ Agregar" en headers.
+class _DashedButton extends StatelessWidget {
+  const _DashedButton({required this.label, required this.onTap});
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: CustomPaint(
+          painter: _DashedRRectPainter(color: AAMColors.accent, radius: 999),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.add, size: 14, color: AAMColors.accent),
+              const SizedBox(width: 6),
+              Text(label, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: AAMColors.accent)),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Fila de ancho completo con borde punteado, para cerrar una lista con la
+/// acción de agregar (en vez de un botón arriba) — según materias_profesores.jpg.
+class _DashedAddRow extends StatelessWidget {
+  const _DashedAddRow({required this.label, required this.onTap});
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: CustomPaint(
+          painter: _DashedRRectPainter(color: AAMColors.accent, radius: 12),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            alignment: Alignment.center,
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.add, size: 16, color: AAMColors.accent),
+              const SizedBox(width: 8),
+              Text(label, style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: AAMColors.accent)),
+            ]),
+          ),
+        ),
       ),
     );
   }

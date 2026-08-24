@@ -49,19 +49,23 @@ class PeriodTypeEnum(enum.Enum):
 
 
 class ClassPeriodModel(Base):
-    """Horario académico DETALLADO día por día de un curso — distinto de
-    `time_slots` (que solo abre/cierra el turno de asistencia)."""
+    """Horario académico DETALLADO día por día — distinto de `time_slots`
+    (que solo abre/cierra el turno de asistencia). Exactamente uno de
+    course_id / workshop_group_id está seteado: la parte curricular es
+    course_id-scoped (compartida por todos los grupos de taller del curso),
+    el contraturno es workshop_group_id-scoped (una grilla por grupo)."""
     __tablename__ = "class_periods"
 
-    id              = Column(String(36), primary_key=True, server_default=func.gen_random_uuid())
-    course_id       = Column(String(36), ForeignKey("courses.id", ondelete="CASCADE"), nullable=False)
-    day_of_week     = Column(SmallInteger, nullable=False)  # ISO: 1 = lunes
-    shift           = Column(Enum(ShiftTypeEnum, name="shift_type"), nullable=False)
-    period_order    = Column(SmallInteger, nullable=False)
+    id                 = Column(String(36), primary_key=True, server_default=func.gen_random_uuid())
+    course_id          = Column(String(36), ForeignKey("courses.id", ondelete="CASCADE"), nullable=True)
+    workshop_group_id  = Column(String(36), ForeignKey("workshop_groups.id", ondelete="CASCADE"), nullable=True)
+    day_of_week        = Column(SmallInteger, nullable=False)  # ISO: 1 = lunes
+    shift               = Column(Enum(ShiftTypeEnum, name="shift_type"), nullable=False)
+    period_order        = Column(SmallInteger, nullable=False)
     # values_callable: sin esto, SQLAlchemy manda el *nombre* del miembro
     # Python ("lesson") en vez de su valor ("class") — y el enum de Postgres
     # solo conoce 'class'/'recess'/'lunch'.
-    period_type     = Column(
+    period_type         = Column(
         Enum(PeriodTypeEnum, name="period_type", values_callable=lambda e: [m.value for m in e]),
         nullable=False,
     )
@@ -77,5 +81,11 @@ class ClassPeriodModel(Base):
     __table_args__ = (
         CheckConstraint("day_of_week BETWEEN 1 AND 7", name="ck_class_periods_day_of_week"),
         CheckConstraint("end_time > start_time", name="ck_class_periods_time_order"),
-        UniqueConstraint("course_id", "day_of_week", "shift", "period_order", name="uq_class_periods_order"),
+        CheckConstraint(
+            "(course_id IS NOT NULL AND workshop_group_id IS NULL)"
+            " OR (course_id IS NULL AND workshop_group_id IS NOT NULL)",
+            name="ck_class_periods_course_xor_workshop",
+        ),
+        UniqueConstraint("course_id", "day_of_week", "shift", "period_order", name="uq_class_periods_order_course"),
+        UniqueConstraint("workshop_group_id", "day_of_week", "shift", "period_order", name="uq_class_periods_order_workshop"),
     )
