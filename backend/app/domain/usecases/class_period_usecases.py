@@ -51,12 +51,10 @@ class CreateClassPeriod:
             grupos_del_curso = {g.id for g in self.workshop_group_repo.get_by_course(course_id)}
             if workshop_group_id not in grupos_del_curso:
                 raise ClassPeriodError("El grupo de taller no pertenece a este curso.", 400)
-            scope = {"course_id": None, "workshop_group_id": workshop_group_id}
-        else:
-            scope = {"course_id": course_id, "workshop_group_id": None}
 
         return self.repo.create(
-            **scope, day_of_week=day_of_week, shift=shift, period_type=period_type,
+            course_id=course_id, workshop_group_id=workshop_group_id,
+            day_of_week=day_of_week, shift=shift, period_type=period_type,
             start_time=start_time, end_time=end_time,
             subject_id=subject_id, teacher_id=teacher_id, is_fifth_module=is_fifth_module,
         )

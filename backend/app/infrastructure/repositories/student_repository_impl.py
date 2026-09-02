@@ -33,6 +33,10 @@ class AlumnoRepositoryImpl(AlumnoRepository):
             curso=curso_label,
             recursante=student.is_repeating_student,
             porcentaje_asistencia=0.0,
+            academic_year=course.academic_year if course else 0,
+            grade_year=course.grade_year if course else 0,
+            division=course.division if course else 0,
+            is_active=student.is_active,
             workshop_group_id=str(student.workshop_group_id) if student.workshop_group_id else None,
             taller=student.workshop_group.group_label if student.workshop_group else None,
         )
@@ -73,6 +77,15 @@ class AlumnoRepositoryImpl(AlumnoRepository):
             workshop_group_id=workshop_group_id,
         )
         self.db.add(student)
+        self.db.commit()
+        self.db.refresh(student)
+        return self._to_entity(student)
+
+    def toggle_active(self, id: str) -> Optional[Alumno]:
+        student = self.db.query(StudentModel).filter(StudentModel.id == id).first()
+        if not student:
+            return None
+        student.is_active = not student.is_active
         self.db.commit()
         self.db.refresh(student)
         return self._to_entity(student)

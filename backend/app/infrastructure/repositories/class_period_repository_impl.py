@@ -6,7 +6,6 @@ from app.domain.entities.class_period import ClassPeriod
 from app.domain.repositories.class_period_repository import ClassPeriodRepository
 from app.infrastructure.models.academic_model import ClassPeriodModel, PeriodTypeEnum
 from app.infrastructure.models.schedule_model import ShiftTypeEnum
-from app.infrastructure.models.course_model import WorkshopGroupModel
 
 
 class ClassPeriodRepositoryImpl(ClassPeriodRepository):
@@ -17,7 +16,7 @@ class ClassPeriodRepositoryImpl(ClassPeriodRepository):
     def _to_entity(m: ClassPeriodModel) -> ClassPeriod:
         return ClassPeriod(
             id=str(m.id),
-            course_id=str(m.course_id) if m.course_id else None,
+            course_id=str(m.course_id),
             workshop_group_id=str(m.workshop_group_id) if m.workshop_group_id else None,
             day_of_week=m.day_of_week,
             shift=m.shift.value,
@@ -33,15 +32,11 @@ class ClassPeriodRepositoryImpl(ClassPeriodRepository):
         )
 
     def get_by_course(self, course_id: str) -> List[ClassPeriod]:
-        # Curriculares (course_id-scoped) + contraturno de TODOS los grupos
-        # de taller de este curso (workshop_group_id-scoped).
+        # course_id siempre apunta al curso (tenga o no workshop_group_id) —
+        # no hace falta join con workshop_groups para traer todo.
         rows = (
             self.db.query(ClassPeriodModel)
-            .outerjoin(WorkshopGroupModel, ClassPeriodModel.workshop_group_id == WorkshopGroupModel.id)
-            .filter(
-                (ClassPeriodModel.course_id == course_id)
-                | (WorkshopGroupModel.course_id == course_id)
-            )
+            .filter(ClassPeriodModel.course_id == course_id)
             .order_by(ClassPeriodModel.day_of_week, ClassPeriodModel.shift, ClassPeriodModel.period_order)
             .all()
         )
@@ -50,7 +45,7 @@ class ClassPeriodRepositoryImpl(ClassPeriodRepository):
     def create(
         self,
         *,
-        course_id: Optional[str] = None,
+        course_id: str,
         workshop_group_id: Optional[str] = None,
         day_of_week: int,
         shift: str,
@@ -62,10 +57,13 @@ class ClassPeriodRepositoryImpl(ClassPeriodRepository):
         is_fifth_module: bool = False,
     ) -> ClassPeriod:
         shift_enum = ShiftTypeEnum(shift)
+        # Curricular: único dentro de (course_id, día, turno). De taller:
+        # único dentro de (workshop_group_id, día, turno) — refleja los dos
+        # índices únicos parciales reales de la DB.
         scope_filter = (
-            ClassPeriodModel.course_id == course_id
-            if course_id
-            else ClassPeriodModel.workshop_group_id == workshop_group_id
+            ClassPeriodModel.workshop_group_id == workshop_group_id
+            if workshop_group_id
+            else (ClassPeriodModel.course_id == course_id) & (ClassPeriodModel.workshop_group_id.is_(None))
         )
         next_order = (
             self.db.query(func.coalesce(func.max(ClassPeriodModel.period_order), 0))

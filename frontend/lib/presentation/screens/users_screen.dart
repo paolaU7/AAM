@@ -106,20 +106,25 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
   }
 
   Widget _buildBanner(AAMTheme theme) {
+    // AAMColors.mint es un fondo fijo y claro que no sigue el tema — en modo
+    // oscuro quedaba un tinte apagado con texto igual de oscuro encima
+    // (bajo contraste). Se reemplaza por un tinte de accent con más opacidad
+    // en modo oscuro, y el texto/ícono siguen theme.text.
+    final bgAlpha = theme.isDark ? 0.18 : 0.12;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
-        color: AAMColors.mint.withAlpha((0.3 * 255).round()),
+        color: AAMColors.accent.withAlpha((bgAlpha * 255).round()),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AAMColors.accent.withAlpha((0.3 * 255).round())),
       ),
       child: Row(children: [
-        const Icon(Icons.shield_outlined, size: 18, color: AAMColors.primary),
+        Icon(Icons.shield_outlined, size: 18, color: theme.text),
         const SizedBox(width: 10),
         Expanded(child: Text(
           'Solo dirección puede crear y gestionar cuentas. '
           'Los usuarios se generan automáticamente en formato apellido.nombre.',
-          style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.primary),
+          style: GoogleFonts.dmSans(fontSize: 13, color: theme.text),
         )),
       ]),
     );
@@ -467,12 +472,11 @@ class _NuevoUsuarioModalState extends State<_NuevoUsuarioModal> {
         border: Border.all(color: AAMColors.border),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: DropdownButton<T>(
+      child: AAMDropdown<T>(
         value: value,
-        underline: const SizedBox.shrink(),
+        options: items,
+        itemLabel: labelOf,
         isExpanded: true,
-        style: GoogleFonts.dmSans(fontSize: 14, color: AAMColors.primary),
-        items: items.map((i) => DropdownMenuItem(value: i, child: Text(labelOf(i)))).toList(),
         onChanged: onChanged,
       ),
     );

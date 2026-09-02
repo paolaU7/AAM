@@ -415,3 +415,148 @@ class _AAMThemeToggleState extends State<AAMThemeToggle>
     );
   }
 }
+
+// ─── Dropdown ─────────────────────────────────────────────────────────────────
+/// Select con estilo consistente en toda la app. Existe por un bug de
+/// contraste en modo oscuro: `DropdownButton` sigue el tema en el texto de
+/// las opciones (vía `style`) pero, si no se setea `dropdownColor`, el fondo
+/// del menú desplegado queda en el blanco por default de Flutter — texto
+/// claro sobre fondo blanco. Cualquier select nuevo en la app debería usar
+/// este widget (o `AAMLabeledDropdown`) en vez de `DropdownButton` directo.
+class AAMDropdown<T> extends StatelessWidget {
+  const AAMDropdown({
+    super.key,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+    this.itemLabel,
+    this.hint,
+    this.isExpanded = false,
+    this.fontSize = 14,
+    this.fontWeight = FontWeight.w500,
+  });
+
+  final T? value;
+  final List<T> options;
+  final ValueChanged<T?>? onChanged;
+  final String Function(T)? itemLabel;
+  final String? hint;
+  final bool isExpanded;
+  final double fontSize;
+  final FontWeight fontWeight;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: AAMTheme(),
+      builder: (context, _) {
+        final theme = AAMTheme();
+        final habilitado = onChanged != null && options.isNotEmpty;
+        return DropdownButton<T>(
+          value: value,
+          underline: const SizedBox.shrink(),
+          isExpanded: isExpanded,
+          dropdownColor: theme.card,
+          hint: hint == null ? null : Text(hint!, style: GoogleFonts.dmSans(fontSize: fontSize - 1, color: theme.textSec)),
+          style: GoogleFonts.dmSans(fontSize: fontSize, fontWeight: fontWeight, color: theme.text),
+          items: options.map((o) => DropdownMenuItem(
+            value: o,
+            child: Text(itemLabel != null ? itemLabel!(o) : o.toString()),
+          )).toList(),
+          onChanged: habilitado ? onChanged : null,
+        );
+      },
+    );
+  }
+}
+
+/// Variante de [AAMDropdown] con label arriba y caja con borde — para
+/// campos de formulario (alta/edición de curso, alumno, etc.).
+class AAMLabeledDropdown<T> extends StatelessWidget {
+  const AAMLabeledDropdown({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+    this.itemLabel,
+    this.hint,
+  });
+
+  final String label;
+  final T? value;
+  final List<T> options;
+  final ValueChanged<T?>? onChanged;
+  final String Function(T)? itemLabel;
+  final String? hint;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: AAMTheme(),
+      builder: (context, _) {
+        final theme = AAMTheme();
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: theme.textSec)),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(10)),
+            child: AAMDropdown<T>(
+              value: value,
+              options: options,
+              onChanged: onChanged,
+              itemLabel: itemLabel,
+              hint: hint ?? 'Seleccionar',
+              isExpanded: true,
+            ),
+          ),
+        ]);
+      },
+    );
+  }
+}
+
+// ─── Date/time pickers temados ────────────────────────────────────────────────
+/// `showDatePicker`/`showTimePicker` usan el Material Theme de la app, que
+/// acá no sigue a `AAMTheme` (el proyecto no usa el dark mode nativo de
+/// Flutter) — sin esto, el picker se ve siempre claro, desentonando en modo
+/// oscuro. No es el mismo bug de contraste (el picker default es legible),
+/// es solo inconsistencia visual.
+ThemeData _pickerTheme(AAMTheme theme) {
+  final base = theme.isDark ? ThemeData.dark() : ThemeData.light();
+  return base.copyWith(
+    colorScheme: base.colorScheme.copyWith(
+      primary: AAMColors.accent,
+      onPrimary: AAMColors.white,
+      surface: theme.card,
+      onSurface: theme.text,
+    ),
+    dialogTheme: DialogThemeData(backgroundColor: theme.card),
+  );
+}
+
+Future<TimeOfDay?> aamShowTimePicker(BuildContext context, {required TimeOfDay initialTime}) {
+  final theme = AAMTheme();
+  return showTimePicker(
+    context: context,
+    initialTime: initialTime,
+    builder: (context, child) => Theme(data: _pickerTheme(theme), child: child!),
+  );
+}
+
+Future<DateTime?> aamShowDatePicker(
+  BuildContext context, {
+  required DateTime initialDate,
+  required DateTime firstDate,
+  required DateTime lastDate,
+}) {
+  final theme = AAMTheme();
+  return showDatePicker(
+    context: context,
+    initialDate: initialDate,
+    firstDate: firstDate,
+    lastDate: lastDate,
+    builder: (context, child) => Theme(data: _pickerTheme(theme), child: child!),
+  );
+}

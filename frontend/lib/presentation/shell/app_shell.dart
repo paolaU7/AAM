@@ -154,17 +154,17 @@ class _Sidebar extends StatelessWidget {
                       Text(
                         'Dirección',
                         style: GoogleFonts.dmSans(
-                          fontSize: 12, fontWeight: FontWeight.w700, color: AAMColors.primary,
+                          fontSize: 12, fontWeight: FontWeight.w700, color: theme.text,
                         ),
                       ),
                       Text(
                         'adm.dir',
-                        style: GoogleFonts.dmSans(fontSize: 10, color: AAMColors.textSec),
+                        style: GoogleFonts.dmSans(fontSize: 10, color: theme.textSec),
                       ),
                     ],
                   ),
                 ),
-                const Icon(Icons.logout_outlined, size: 16, color: AAMColors.textSec),
+                Icon(Icons.logout_outlined, size: 16, color: theme.textSec),
               ],
             ),
           ),

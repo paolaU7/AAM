@@ -9,6 +9,7 @@ import '../../domain/entities/attendance_record.dart';
 import '../../domain/entities/academic.dart';
 import '../../domain/entities/class_period.dart';
 import '../../domain/entities/preceptor_assignment.dart';
+import '../../domain/entities/specialty.dart';
 
 /// Error de API que expone el mensaje del backend tal cual (para mostrarlo al
 /// usuario, p.ej. "Ya existe un alumno registrado con ese DNI.").
@@ -45,13 +46,13 @@ class ApiDatasource {
     required int academicYear,
     required int gradeYear,
     required int division,
-    String? specialty,
+    required String specialtyId,
   }) async {
     final body = {
       'academic_year': academicYear,
       'grade_year': gradeYear,
       'division': division,
-      if (specialty != null && specialty.isNotEmpty) 'specialty': specialty,
+      'specialty_id': specialtyId,
     };
     final response = await http
         .post(
@@ -68,6 +69,51 @@ class ApiDatasource {
       detail = (jsonDecode(response.body)['detail'] ?? '').toString();
     } catch (_) {}
     throw ApiException(detail.isNotEmpty ? detail : 'No se pudo crear el curso.');
+  }
+
+  Future<Course> actualizarCurso({
+    required String id,
+    required int academicYear,
+    required int gradeYear,
+    required int division,
+    required String specialtyId,
+  }) async {
+    final body = {
+      'academic_year': academicYear,
+      'grade_year': gradeYear,
+      'division': division,
+      'specialty_id': specialtyId,
+    };
+    final response = await http
+        .patch(
+          Uri.parse('$baseUrl/courses/$id'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) {
+      return _cursoFromJson(jsonDecode(response.body));
+    }
+    String detail = '';
+    try {
+      detail = (jsonDecode(response.body)['detail'] ?? '').toString();
+    } catch (_) {}
+    throw ApiException(detail.isNotEmpty ? detail : 'No se pudo actualizar el curso.');
+  }
+
+  // ── Especialidades y configuración general ──────────────────────────────────
+
+  Future<List<Specialty>> getSpecialties() async {
+    final response = await http.get(Uri.parse('$baseUrl/specialties')).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) throw Exception('Error al obtener especialidades');
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((j) => Specialty.fromJson(j)).toList();
+  }
+
+  Future<SchoolSettings> getSchoolSettings() async {
+    final response = await http.get(Uri.parse('$baseUrl/school-settings')).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) throw Exception('Error al obtener la configuración del colegio');
+    return SchoolSettings.fromJson(jsonDecode(response.body));
   }
 
   // ── Alta manual en cascada (año lectivo → año de cursada → división) ───────
@@ -131,6 +177,17 @@ class ApiDatasource {
       detail = (jsonDecode(response.body)['detail'] ?? '').toString();
     } catch (_) {}
     throw ApiException(detail.isNotEmpty ? detail : 'No se pudo actualizar el alumno.');
+  }
+
+  /// Baja/alta lógica — no borra al alumno del sistema.
+  Future<Student> toggleActiveAlumno(String id) async {
+    final response = await http
+        .post(Uri.parse('$baseUrl/alumnos/$id/toggle-active'))
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) {
+      return _alumnoFromJson(jsonDecode(response.body));
+    }
+    throw ApiException('No se pudo cambiar el estado del alumno.');
   }
 
   // ── Horarios (time_slots) ────────────────────────────────────────────────────
@@ -440,6 +497,10 @@ class ApiDatasource {
       curso: json['curso'],
       recursante: json['recursante'] ?? false,
       porcentajeAsistencia: (json['porcentaje_asistencia'] as num).toDouble(),
+      academicYear: (json['academic_year'] as num?)?.toInt() ?? 0,
+      gradeYear: (json['grade_year'] as num?)?.toInt() ?? 0,
+      division: (json['division'] as num?)?.toInt() ?? 0,
+      isActive: json['is_active'] ?? true,
       workshopGroupId: json['workshop_group_id']?.toString(),
       taller: json['taller'],
     );
@@ -451,7 +512,8 @@ class ApiDatasource {
       academicYear: (json['academic_year'] as num).toInt(),
       gradeYear: (json['grade_year'] as num).toInt(),
       division: (json['division'] as num).toInt(),
-      specialty: json['specialty'],
+      specialtyId: json['specialty_id'].toString(),
+      specialtyName: json['specialty_name'] ?? '',
       totalStudents: json['total_students'] ?? 0,
       name: json['name'],
     );

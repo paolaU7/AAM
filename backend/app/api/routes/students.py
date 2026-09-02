@@ -8,7 +8,7 @@ from app.infrastructure.repositories.student_repository_impl import AlumnoReposi
 from app.infrastructure.repositories.course_repository_impl import CourseRepositoryImpl
 from app.infrastructure.repositories.workshop_group_repository_impl import WorkshopGroupRepositoryImpl
 from app.domain.usecases.student_usecases import (
-    GetAlumnos, GetAlumnoPorId, ActualizarAlumno, CrearAlumnoManual, AltaAlumnoError,
+    GetAlumnos, GetAlumnoPorId, ActualizarAlumno, ToggleAlumnoActive, CrearAlumnoManual, AltaAlumnoError,
 )
 from app.domain.usecases.student_import_usecases import (
     ImportarAlumnosExcel, ImportarAlumnosExcelError,
@@ -27,6 +27,10 @@ class AlumnoResponse(BaseModel):
     recursante: bool
     porcentaje_asistencia: float
     estado_regularidad: str
+    academic_year: int
+    grade_year: int
+    division: int
+    is_active: bool
     workshop_group_id: Optional[str] = None
     taller: Optional[str] = None
 
@@ -67,6 +71,8 @@ def _to_response(a: Alumno) -> AlumnoResponse:
         recursante=a.recursante,
         porcentaje_asistencia=a.porcentaje_asistencia,
         estado_regularidad=a.estado_regularidad.value,
+        academic_year=a.academic_year, grade_year=a.grade_year, division=a.division,
+        is_active=a.is_active,
         workshop_group_id=a.workshop_group_id,
         taller=a.taller,
     )
@@ -203,6 +209,16 @@ def actualizar_alumno(id: str, body: AlumnoUpdate, db: Session = Depends(get_db)
         workshop_group_id=body.workshop_group_id,
     )
     result = ActualizarAlumno(repo).execute(id, alumno)
+    if not result:
+        raise HTTPException(status_code=404, detail="Alumno no encontrado")
+    return _to_response(result)
+
+
+@router.post("/{id}/toggle-active", response_model=AlumnoResponse)
+def toggle_active_alumno(id: str, db: Session = Depends(get_db)):
+    """Baja/alta lógica — no borra al alumno del sistema."""
+    repo = AlumnoRepositoryImpl(db)
+    result = ToggleAlumnoActive(repo).execute(id)
     if not result:
         raise HTTPException(status_code=404, detail="Alumno no encontrado")
     return _to_response(result)

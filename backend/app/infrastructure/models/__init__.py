@@ -1,6 +1,9 @@
 """Import all ORM models so they register on Base.metadata and string-based
 relationships resolve regardless of which routers are loaded."""
 
+from app.infrastructure.models.settings_model import (
+    SpecialtyModel, SchoolSettingsModel,
+)
 from app.infrastructure.models.course_model import (
     CourseModel, WorkshopGroupModel,
 )
@@ -27,6 +30,7 @@ from app.infrastructure.models.attendance_model import (
 )
 
 __all__ = [
+    "SpecialtyModel", "SchoolSettingsModel",
     "CourseModel", "WorkshopGroupModel",
     "StudentModel",
     "UserModel", "PreceptorCourseAssignmentModel", "DeviceModel", "UserRoleEnum",

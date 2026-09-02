@@ -17,6 +17,14 @@ class Alumno:
     curso: str
     recursante: bool
     porcentaje_asistencia: float
+    # Dimensiones del curso expuestas por separado (además de `curso`, el
+    # label compuesto) para que la tabla del frontend pueda filtrar/mostrar
+    # año y división como columnas independientes sin tener que parsear el
+    # string armado.
+    academic_year: int = 0
+    grade_year: int = 0
+    division: int = 0
+    is_active: bool = True
     workshop_group_id: Optional[str] = None
     taller: Optional[str] = None  # group_label legible, si tiene grupo asignado
 

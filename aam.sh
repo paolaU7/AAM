@@ -62,10 +62,10 @@ cmd_build() {
     if [ -d "$PROJECT_ROOT/backend" ]; then
         cd "$PROJECT_ROOT/backend"
 
-        if [ -f "pyproject.toml" ]; then
-            poetry install || failed=1
-        elif [ -f "requirements.txt" ]; then
+        if [ -f "requirements.txt" ]; then
             pip install -r requirements.txt || failed=1
+        elif [ -f "pyproject.toml" ]; then
+            poetry install || failed=1
         else
             warn "No se encontraron dependencias."
         fi
@@ -119,7 +119,7 @@ cmd_run_back() {
     if [ -d "$PROJECT_ROOT/backend" ]; then
         cd "$PROJECT_ROOT/backend"
         log "Levantando backend en http://localhost:8000 ..."
-        PYTHONPATH=. poetry run uvicorn app.main:app --reload
+        uvicorn app.main:app --reload
     else
         warn "backend/ no encontrado."
     fi
@@ -147,7 +147,7 @@ cmd_run() {
     if [ -d "$PROJECT_ROOT/backend" ]; then
         log "Levantando backend..."
         cd "$PROJECT_ROOT/backend"
-        PYTHONPATH=. poetry run uvicorn app.main:app --reload &
+        uvicorn app.main:app --reload &
         BACK_PID=$!
         cd "$PROJECT_ROOT"
     else

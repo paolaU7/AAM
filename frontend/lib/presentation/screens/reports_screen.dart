@@ -144,6 +144,10 @@ class _ReporteCardState extends State<_ReporteCard> {
   @override
   Widget build(BuildContext context) {
     final c = widget.config;
+    // Acentos oscuros (p.ej. AAMColors.primary) pierden contraste contra la
+    // card en modo oscuro (que también es oscura) — se aclaran un poco acá,
+    // en vez de usar c.color tal cual.
+    final accentColor = widget.theme.isDark ? Color.lerp(c.color, AAMColors.white, 0.35)! : c.color;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit:  (_) => setState(() => _hovered = false),
@@ -154,7 +158,7 @@ class _ReporteCardState extends State<_ReporteCard> {
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: _hovered ? widget.theme.surfaceCol : widget.theme.card,
-          border: Border.all(color: _hovered ? c.color : widget.theme.borderCol),
+          border: Border.all(color: _hovered ? accentColor : widget.theme.borderCol),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -165,7 +169,7 @@ class _ReporteCardState extends State<_ReporteCard> {
                 color: c.color.withAlpha(_hovered ? 77 : 31),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(c.icon, size: 20, color: _hovered ? widget.theme.text : c.color),
+              child: Icon(c.icon, size: 20, color: _hovered ? widget.theme.text : accentColor),
             ),
             const Spacer(),
             Container(
@@ -175,6 +179,9 @@ class _ReporteCardState extends State<_ReporteCard> {
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(c.badge,
+                // el chip de badge siempre tiene fondo mint (claro, fijo),
+                // así que c.color tal cual ya es seguro acá sin importar el
+                // tema — no es parte del bug de contraste.
                 style: GoogleFonts.dmSans(fontSize: 10, fontWeight: FontWeight.w600,
                   color: _hovered ? widget.theme.text : c.color)),
             ),
@@ -182,7 +189,7 @@ class _ReporteCardState extends State<_ReporteCard> {
           const SizedBox(height: 16),
           Text(c.titulo,
             style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700,
-              color: _hovered ? widget.theme.text : c.color)),
+              color: _hovered ? widget.theme.text : accentColor)),
           const SizedBox(height: 6),
           Text(c.descripcion,
             style: GoogleFonts.dmSans(fontSize: 12,
@@ -249,11 +256,10 @@ class _FilterDropdownState extends State<_FilterDropdown> {
           borderRadius: BorderRadius.circular(8),
           color: widget.theme.inputBg,
         ),
-        child: DropdownButton<String>(
+        child: AAMDropdown<String>(
           value: _selected,
-          underline: const SizedBox.shrink(),
-          style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.text),
-          items: widget.items.map((i) => DropdownMenuItem(value: i, child: Text(i, style: GoogleFonts.dmSans(color: widget.theme.text)))).toList(),
+          options: widget.items,
+          fontSize: 13,
           onChanged: (v) => setState(() => _selected = v ?? _selected),
         ),
       ),

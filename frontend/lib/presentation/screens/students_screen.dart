@@ -23,7 +23,9 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
   late Future<List<Student>> _future;
 
   String _searchQuery = '';
-  String _filterCurso = 'Todos';
+  int? _filterAnio;       // año de cursada (grade_year) — null = todos
+  int? _filterDivision;   // null = todas
+  String _filterTaller = 'Todos';
   String _filterEstado = 'Todos';
 
   @override
@@ -69,13 +71,25 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
     if (result == true) _refresh();
   }
 
+  Future<void> _toggleActivo(Student alumno) async {
+    try {
+      await _repo.toggleActive(alumno.id);
+      _refresh();
+    } catch (_) {
+      // el estado no cambió — no hay nada más que hacer acá, el usuario
+      // puede reintentar con el mismo botón
+    }
+  }
+
   List<Student> _applyFilters(List<Student> all) {
     return all.where((a) {
       final matchSearch = _searchQuery.isEmpty ||
           a.nombreCompleto.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           a.dni.contains(_searchQuery) ||
           a.curso.toLowerCase().contains(_searchQuery.toLowerCase());
-      final matchCurso = _filterCurso == 'Todos' || a.curso == _filterCurso;
+      final matchAnio = _filterAnio == null || a.gradeYear == _filterAnio;
+      final matchDivision = _filterDivision == null || a.division == _filterDivision;
+      final matchTaller = _filterTaller == 'Todos' || (a.taller ?? 'Sin grupo') == _filterTaller;
       final matchEstado = switch (_filterEstado) {
         'Todos' => true,
         'Regular' => a.estadoRegularidad == EstadoRegularidad.regular,
@@ -84,7 +98,7 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
         'Recursante' => a.recursante,
         _ => true,
       };
-      return matchSearch && matchCurso && matchEstado;
+      return matchSearch && matchAnio && matchDivision && matchTaller && matchEstado;
     }).toList();
   }
 
@@ -124,12 +138,14 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
                 );
               }
 
-              final alumnos  = _applyFilters(snap.data!);
-              final cursoOpts = ['Todos', ...snap.data!.map((a) => a.curso).toSet().toList()..sort()];
+              final alumnos = _applyFilters(snap.data!);
+              final aniosOpts = snap.data!.map((a) => a.gradeYear).toSet().toList()..sort();
+              final divisionOpts = snap.data!.map((a) => a.division).toSet().toList()..sort();
+              final tallerOpts = ['Todos', ...snap.data!.map((a) => a.taller ?? 'Sin grupo').toSet().toList()..sort()];
 
               return Padding(
                 padding: const EdgeInsets.all(32),
-                child: _buildContent(theme, cursoOpts, snap.data!.length, alumnos),
+                child: _buildContent(theme, aniosOpts, divisionOpts, tallerOpts, snap.data!.length, alumnos),
               );
             },
           ),
@@ -138,15 +154,29 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
     );
   }
 
-  Widget _buildContent(AAMTheme theme, List<String> cursoOpts, int totalAlumnos, List<Student> alumnos) {
+  Widget _buildContent(
+    AAMTheme theme,
+    List<int> aniosOpts,
+    List<int> divisionOpts,
+    List<String> tallerOpts,
+    int totalAlumnos,
+    List<Student> alumnos,
+  ) {
     return Column(children: [
-      _buildFilters(cursoOpts, totalAlumnos, alumnos.length, theme),
+      _buildFilters(aniosOpts, divisionOpts, tallerOpts, totalAlumnos, alumnos.length, theme),
       const SizedBox(height: 24),
       Expanded(child: _buildTable(alumnos, theme)),
     ]);
   }
 
-  Widget _buildFilters(List<String> cursos, int total, int filtered, AAMTheme theme) {
+  Widget _buildFilters(
+    List<int> aniosOpts,
+    List<int> divisionOpts,
+    List<String> tallerOpts,
+    int total,
+    int filtered,
+    AAMTheme theme,
+  ) {
     return Row(children: [
       Expanded(
         child: Container(
@@ -177,12 +207,12 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
           border: Border.all(color: theme.borderCol),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: DropdownButton<String>(
-          value: _filterCurso,
-          underline: const SizedBox.shrink(),
-          style: GoogleFonts.dmSans(fontSize: 13, color: theme.text),
-          items: cursos.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-          onChanged: (v) => setState(() => _filterCurso = v ?? 'Todos'),
+        child: AAMDropdown<int?>(
+          value: _filterAnio,
+          options: <int?>[null, ...aniosOpts],
+          itemLabel: (a) => a == null ? 'Año: todos' : gradeYearOrdinal(a),
+          fontSize: 13,
+          onChanged: (v) => setState(() => _filterAnio = v),
         ),
       ),
       const SizedBox(width: 12),
@@ -193,26 +223,85 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
           border: Border.all(color: theme.borderCol),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: DropdownButton<String>(
+        child: AAMDropdown<int?>(
+          value: _filterDivision,
+          options: <int?>[null, ...divisionOpts],
+          itemLabel: (d) => d == null ? 'División: todas' : divisionOrdinal(d),
+          fontSize: 13,
+          onChanged: (v) => setState(() => _filterDivision = v),
+        ),
+      ),
+      const SizedBox(width: 12),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: theme.card,
+          border: Border.all(color: theme.borderCol),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: AAMDropdown<String>(
+          value: _filterTaller,
+          options: tallerOpts,
+          fontSize: 13,
+          onChanged: (v) => setState(() => _filterTaller = v ?? 'Todos'),
+        ),
+      ),
+      const SizedBox(width: 12),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: theme.card,
+          border: Border.all(color: theme.borderCol),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: AAMDropdown<String>(
           value: _filterEstado,
-          underline: const SizedBox.shrink(),
-          style: GoogleFonts.dmSans(fontSize: 13, color: theme.text),
-          items: const [
-            'Todos',
-            'Regular',
-            'Irregular',
-            'En riesgo',
-            'Recursante',
-          ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+          options: const ['Todos', 'Regular', 'Irregular', 'En riesgo', 'Recursante'],
+          fontSize: 13,
           onChanged: (v) => setState(() => _filterEstado = v ?? 'Todos'),
         ),
       ),
+      const SizedBox(width: 12),
+      _buildLimpiarFiltros(theme),
       const SizedBox(width: 12),
       Text(
         '$filtered de $total alumnos',
         style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
       ),
     ]);
+  }
+
+  bool get _hayFiltrosActivos =>
+      _filterAnio != null || _filterDivision != null || _filterTaller != 'Todos' || _filterEstado != 'Todos';
+
+  void _limpiarFiltros() {
+    setState(() {
+      _filterAnio = null;
+      _filterDivision = null;
+      _filterTaller = 'Todos';
+      _filterEstado = 'Todos';
+    });
+  }
+
+  Widget _buildLimpiarFiltros(AAMTheme theme) {
+    final activo = _hayFiltrosActivos;
+    return GestureDetector(
+      onTap: activo ? _limpiarFiltros : null,
+      child: MouseRegion(
+        cursor: activo ? SystemMouseCursors.click : MouseCursor.defer,
+        child: Opacity(
+          opacity: activo ? 1 : 0.4,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.filter_alt_off_outlined, size: 16, color: AAMColors.danger),
+              const SizedBox(width: 6),
+              Text('Borrar filtros', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: AAMColors.danger)),
+            ]),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildTable(List<Student> alumnos, AAMTheme theme) {
@@ -225,11 +314,14 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
       child: Column(children: [
         const AAMTableHeader(columns: [
           ('Alumno',       3),
-          ('Curso',        2),
+          ('Año',          1),
+          ('División',     1),
+          ('Taller',       2),
           ('DNI',          2),
           ('Asistencia',   2),
           ('Estado',       2),
-          ('',             1),
+          ('Activo',       1),
+          ('',             2),
         ]),
         Expanded(
           child: alumnos.isEmpty
@@ -251,6 +343,7 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
                     theme: theme,
                     onVerDetalle: () => _abrirDetalle(alumnos[i]),
                     onEditar: () => _abrirEdicion(alumnos[i]),
+                    onToggleActivo: () => _toggleActivo(alumnos[i]),
                   ),
                 ),
         ),
@@ -266,12 +359,14 @@ class _AlumnoRow extends StatefulWidget {
     required this.theme,
     required this.onVerDetalle,
     required this.onEditar,
+    required this.onToggleActivo,
   });
 
   final Student alumno;
   final AAMTheme theme;
   final VoidCallback onVerDetalle;
   final VoidCallback onEditar;
+  final VoidCallback onToggleActivo;
 
   @override
   State<_AlumnoRow> createState() => _AlumnoRowState();
@@ -304,74 +399,102 @@ class _AlumnoRowState extends State<_AlumnoRow> {
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: widget.onVerDetalle,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          decoration: BoxDecoration(
-            color: _hovered ? widget.theme.surfaceCol : widget.theme.card,
-            border: Border(bottom: BorderSide(color: widget.theme.borderCol, width: 1)),
-          ),
-          child: Row(children: [
-            // Alumno
-            Expanded(flex: 3, child: Row(children: [
-              CircleAvatar(
-                radius: 16,
-                backgroundColor: AAMColors.mint,
-                child: Text(a.apellido.substring(0, 1),
-                  style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: widget.theme.text)),
-              ),
-              const SizedBox(width: 10),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(a.nombreCompleto,
-                  style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: widget.theme.text)),
-                if (a.recursante)
-                  Row(children: [
-                    Icon(Icons.repeat_outlined, size: 14, color: AAMColors.accent),
-                    const SizedBox(width: 4),
-                    Text('Recursante', style: GoogleFonts.dmSans(fontSize: 10, color: AAMColors.accent)),
-                  ]),
-              ]),
-            ])),
-            // Curso
-            Expanded(flex: 2, child: Text(a.curso,
-              style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.text))),
-            // DNI
-            Expanded(flex: 2, child: Text(a.dni,
-              style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
-            // Asistencia
-            Expanded(flex: 2, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('${a.porcentajeAsistencia.toStringAsFixed(1)}%',
-                style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: _asistColor)),
-              const SizedBox(height: 4),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: a.porcentajeAsistencia / 100,
-                  minHeight: 6,
-                  color: _asistColor,
-                  backgroundColor: widget.theme.borderCol,
+        child: Opacity(
+          // Alumnos dados de baja se muestran atenuados, no ocultos — igual
+          // que el resto de los toggles de la app (mismo criterio que
+          // "Borrar filtros" en Cursos).
+          opacity: a.isActive ? 1 : 0.5,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            decoration: BoxDecoration(
+              color: _hovered ? widget.theme.surfaceCol : widget.theme.card,
+              border: Border(bottom: BorderSide(color: widget.theme.borderCol, width: 1)),
+            ),
+            child: Row(children: [
+              // Alumno
+              Expanded(flex: 3, child: Row(children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: AAMColors.mint,
+                  child: Text(a.apellido.substring(0, 1),
+                    // AAMColors.mint es un fondo fijo y claro (no sigue el
+                    // tema) — el texto tiene que quedar siempre oscuro para
+                    // contrastar, en vez de theme.text (que en modo oscuro
+                    // se vuelve claro y se pierde contra el fondo del avatar).
+                    style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: AAMColors.primary)),
                 ),
-              ),
-            ])),
-            // Estado
-            Expanded(flex: 2, child: AAMBadge(label: estadoLabel, color: estadoColor)),
-            // Acciones
-            Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-              _ActionBtn(
-                icon: Icons.visibility_outlined,
-                color: widget.theme.text,
-                tooltip: 'Ver detalle',
-                onTap: widget.onVerDetalle,
-              ),
-              const SizedBox(width: 6),
-              _ActionBtn(
-                icon: Icons.edit_outlined,
-                color: AAMColors.accent,
-                tooltip: 'Editar alumno',
-                onTap: widget.onEditar,
-              ),
-            ])),
-          ]),
+                const SizedBox(width: 10),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(a.nombreCompleto,
+                    style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: widget.theme.text)),
+                  if (a.recursante)
+                    Row(children: [
+                      Icon(Icons.repeat_outlined, size: 14, color: AAMColors.accent),
+                      const SizedBox(width: 4),
+                      Text('Recursante', style: GoogleFonts.dmSans(fontSize: 10, color: AAMColors.accent)),
+                    ]),
+                ]),
+              ])),
+              // Año
+              Expanded(flex: 1, child: Text(a.gradeYear > 0 ? gradeYearOrdinal(a.gradeYear) : '—',
+                style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.text))),
+              // División
+              Expanded(flex: 1, child: Text(a.division > 0 ? divisionOrdinal(a.division) : '—',
+                style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.text))),
+              // Taller
+              Expanded(flex: 2, child: Text(a.taller ?? '—',
+                style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
+              // DNI
+              Expanded(flex: 2, child: Text(a.dniFormateado,
+                style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
+              // Asistencia
+              Expanded(flex: 2, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${a.porcentajeAsistencia.toStringAsFixed(1)}%',
+                  style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: _asistColor)),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: a.porcentajeAsistencia / 100,
+                    minHeight: 6,
+                    color: _asistColor,
+                    backgroundColor: widget.theme.borderCol,
+                  ),
+                ),
+              ])),
+              // Estado (regularidad)
+              Expanded(flex: 2, child: AAMBadge(label: estadoLabel, color: estadoColor)),
+              // Activo (baja lógica)
+              Expanded(flex: 1, child: AAMBadge(
+                label: a.isActive ? 'Activo' : 'Inactivo',
+                color: a.isActive ? AAMColors.success : AAMColors.textSec,
+              )),
+              // Acciones
+              Expanded(flex: 2, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                _ActionBtn(
+                  icon: Icons.visibility_outlined,
+                  color: widget.theme.text,
+                  tooltip: 'Ver detalle',
+                  onTap: widget.onVerDetalle,
+                ),
+                const SizedBox(width: 6),
+                _ActionBtn(
+                  icon: Icons.edit_outlined,
+                  color: AAMColors.accent,
+                  tooltip: 'Editar alumno',
+                  onTap: widget.onEditar,
+                ),
+                const SizedBox(width: 6),
+                _ActionBtn(
+                  icon: a.isActive ? Icons.block_outlined : Icons.check_circle_outline,
+                  color: a.isActive ? AAMColors.highlight : AAMColors.success,
+                  tooltip: a.isActive ? 'Dar de baja' : 'Reactivar',
+                  onTap: widget.onToggleActivo,
+                ),
+              ])),
+            ]),
+          ),
         ),
       ),
     );
@@ -485,7 +608,7 @@ class _AlumnoDetalleModal extends StatelessWidget {
               ]),
               const SizedBox(height: 20),
               Wrap(spacing: 10, runSpacing: 10, children: [
-                _DetalleChip(label: 'DNI', value: alumno.dni),
+                _DetalleChip(label: 'DNI', value: alumno.dniFormateado),
                 _DetalleChip(label: 'Curso', value: alumno.curso),
                 if (alumno.taller != null)
                   _DetalleChip(label: 'Taller', value: alumno.taller!, color: AAMColors.accent),
@@ -751,7 +874,7 @@ class _NuevoAlumnoFormState extends State<_NuevoAlumnoForm> {
 
                 // 1) Año lectivo   ·   2) Año de cursada (habilitado al elegir año lectivo)
                 Row(children: [
-                  Expanded(child: _DropdownGroup<int>(
+                  Expanded(child: AAMLabeledDropdown<int>(
                     label: 'Año lectivo',
                     value: _anioLectivoSel,
                     options: _aniosLectivos,
@@ -760,7 +883,7 @@ class _NuevoAlumnoFormState extends State<_NuevoAlumnoForm> {
                     onChanged: _cursosLoading ? null : _onAnioLectivoChanged,
                   )),
                   const SizedBox(width: 16),
-                  Expanded(child: _DropdownGroup<int>(
+                  Expanded(child: AAMLabeledDropdown<int>(
                     label: 'Año de cursada',
                     value: _anioCursadaSel,
                     options: _aniosCursada,
@@ -773,7 +896,7 @@ class _NuevoAlumnoFormState extends State<_NuevoAlumnoForm> {
                 ]),
                 const SizedBox(height: 16),
                 // 3) División
-                _DropdownGroup<int>(
+                AAMLabeledDropdown<int>(
                   label: 'División',
                   value: _divisionSel,
                   options: _divisiones,
@@ -783,7 +906,7 @@ class _NuevoAlumnoFormState extends State<_NuevoAlumnoForm> {
                 ),
                 const SizedBox(height: 16),
                 // 4) Grupo de taller (grupos de ESTE curso puntual, una vez resuelto)
-                _DropdownGroup<WorkshopGroup>(
+                AAMLabeledDropdown<WorkshopGroup>(
                   label: 'Grupo de taller',
                   value: _tallerSel,
                   options: _talleres,
@@ -1067,18 +1190,11 @@ class _EditarAlumnoModalState extends State<_EditarAlumnoModal> {
               border: Border.all(color: theme.borderCol),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: DropdownButton<WorkshopGroup?>(
+            child: AAMDropdown<WorkshopGroup?>(
               value: _tallerSel,
-              underline: const SizedBox.shrink(),
+              options: <WorkshopGroup?>[null, ..._talleres],
+              itemLabel: (w) => w?.name ?? 'Sin asignar',
               isExpanded: true,
-              style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
-              items: [
-                DropdownMenuItem<WorkshopGroup?>(
-                  value: null,
-                  child: Text('Sin asignar', style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec)),
-                ),
-                ..._talleres.map((w) => DropdownMenuItem<WorkshopGroup?>(value: w, child: Text(w.name))),
-              ],
               onChanged: (v) => setState(() => _tallerSel = v),
             ),
           ),
@@ -1124,42 +1240,6 @@ class _FieldGroup extends StatelessWidget {
       Text(label, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: theme.textSec)),
       const SizedBox(height: 6),
       child,
-    ]);
-  }
-}
-
-class _DropdownGroup<T> extends StatelessWidget {
-  const _DropdownGroup({required this.label, required this.value, required this.options, required this.onChanged, this.hint, this.itemLabel});
-  final String label;
-  final T? value;
-  final List<T> options;
-  final ValueChanged<T?>? onChanged;
-  final String? hint;
-  final String Function(T)? itemLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = AAMTheme();
-    final habilitado = onChanged != null && options.isNotEmpty;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: theme.textSec)),
-      const SizedBox(height: 6),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          border: Border.all(color: theme.borderCol),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: DropdownButton<T>(
-          value: value,
-          underline: const SizedBox.shrink(),
-          isExpanded: true,
-          hint: Text(hint ?? 'Seleccionar', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
-          style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
-          items: options.map((o) => DropdownMenuItem(value: o, child: Text(itemLabel != null ? itemLabel!(o) : o.toString()))).toList(),
-          onChanged: habilitado ? onChanged : null,
-        ),
-      ),
     ]);
   }
 }

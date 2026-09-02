@@ -17,6 +17,11 @@ class AlumnoRepository(ABC):
     def actualizar_alumno(self, id: str, alumno: Alumno) -> Optional[Alumno]: ...
 
     @abstractmethod
+    def toggle_active(self, id: str) -> Optional[Alumno]:
+        """Deshabilita/rehabilita al alumno (baja lógica) sin borrarlo."""
+        ...
+
+    @abstractmethod
     def existe_dni(self, dni: str) -> bool: ...
 
     @abstractmethod

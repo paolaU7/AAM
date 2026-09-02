@@ -6,6 +6,7 @@ import '../../domain/entities/time_slot.dart';
 import '../../domain/entities/class_period.dart';
 import '../../domain/entities/academic.dart';
 import '../../domain/entities/preceptor_assignment.dart';
+import '../../domain/entities/specialty.dart';
 import '../../domain/entities/user.dart';
 import '../../infrastructure/datasources/api_datasource.dart';
 import '../../infrastructure/repositories/course_repository_impl.dart';
@@ -27,9 +28,18 @@ class _CursosScreenState extends State<CursosScreen> {
   late final CourseRepositoryImpl _courseRepo;
 
   List<Course> _cursos = [];
+  List<Specialty> _especialidades = [];
+  SchoolSettings? _settings;
   bool _loading = true;
   String? _error;
   Course? _seleccionado;
+
+  // Filtros — null = "todos". Las opciones salen de los mismos catálogos
+  // que usa _CursoForm (school_settings / specialties), nunca hardcodeadas.
+  int? _filtroAnioLectivo;
+  int? _filtroAnioCursada;
+  int? _filtroDivision;
+  Specialty? _filtroEspecialidad;
 
   @override
   void initState() {
@@ -44,8 +54,17 @@ class _CursosScreenState extends State<CursosScreen> {
       _error = null;
     });
     try {
-      final cursos = await _courseRepo.getCourses();
-      if (mounted) setState(() => _cursos = cursos);
+      final results = await Future.wait([
+        _courseRepo.getCourses(),
+        _ds.getSpecialties(),
+        _ds.getSchoolSettings(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _cursos = results[0] as List<Course>;
+        _especialidades = results[1] as List<Specialty>;
+        _settings = results[2] as SchoolSettings;
+      });
     } catch (_) {
       if (mounted) setState(() => _error = 'No se pudieron cargar los cursos.');
     } finally {
@@ -53,13 +72,33 @@ class _CursosScreenState extends State<CursosScreen> {
     }
   }
 
+  List<int> get _aniosLectivosDisponibles {
+    final s = _cursos.map((c) => c.academicYear).toSet().toList()..sort((a, b) => b.compareTo(a));
+    return s;
+  }
+
+  List<Course> get _cursosFiltrados => _cursos.where((c) {
+        if (_filtroAnioLectivo != null && c.academicYear != _filtroAnioLectivo) return false;
+        if (_filtroAnioCursada != null && c.gradeYear != _filtroAnioCursada) return false;
+        if (_filtroDivision != null && c.division != _filtroDivision) return false;
+        if (_filtroEspecialidad != null && c.specialtyId != _filtroEspecialidad!.id) return false;
+        return true;
+      }).toList();
+
   Future<void> _abrirNuevoCurso() async {
-    final result = await showDialog<bool>(
+    final result = await showDialog<Course>(
       context: context,
       barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
-      builder: (_) => _NuevoCursoForm(ds: _ds),
+      builder: (_) => _CursoForm(ds: _ds),
     );
-    if (result == true) _cargar();
+    if (result != null) _cargar();
+  }
+
+  void _onCursoActualizado(Course actualizado) {
+    setState(() {
+      _seleccionado = actualizado;
+      _cursos = [for (final c in _cursos) c.id == actualizado.id ? actualizado : c];
+    });
   }
 
   @override
@@ -73,6 +112,7 @@ class _CursosScreenState extends State<CursosScreen> {
             curso: _seleccionado!,
             ds: _ds,
             onBack: () => setState(() => _seleccionado = null),
+            onCursoActualizado: _onCursoActualizado,
           );
         }
         return _buildLista(theme);
@@ -81,7 +121,11 @@ class _CursosScreenState extends State<CursosScreen> {
   }
 
   Widget _buildLista(AAMTheme theme) {
-    return Column(children: [
+    // stretch: sin esto, el Column por default centra su cross-axis, y como
+    // nada dentro de Padding→_buildGrid fuerza el ancho completo (Wrap se
+    // achica a lo que ocupa su contenido), todo el bloque de filtros+tarjetas
+    // termina angosto y centrado en vez de pegado al borde izquierdo.
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const AAMTopbar(title: 'Cursos'),
       Expanded(
         child: _loading
@@ -97,7 +141,7 @@ class _CursosScreenState extends State<CursosScreen> {
   }
 
   Widget _buildGrid(AAMTheme theme) {
-    final cursos = [..._cursos]
+    final cursos = [..._cursosFiltrados]
       ..sort((a, b) {
         final byYear = b.academicYear.compareTo(a.academicYear);
         if (byYear != 0) return byYear;
@@ -105,22 +149,115 @@ class _CursosScreenState extends State<CursosScreen> {
         if (byGrade != 0) return byGrade;
         return a.division.compareTo(b.division);
       });
-    return SingleChildScrollView(
-      child: Wrap(
-        spacing: 16,
-        runSpacing: 16,
-        children: [
-          ...cursos.map((c) => _CursoCard(
-                curso: c,
-                theme: theme,
-                onTap: () => setState(() => _seleccionado = c),
-              )),
-          _NuevoCursoCard(theme: theme, onTap: _abrirNuevoCurso),
-        ],
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _buildFiltros(theme),
+      const SizedBox(height: 20),
+      Expanded(
+        child: SingleChildScrollView(
+          child: Wrap(
+            spacing: 16,
+            runSpacing: 16,
+            children: [
+              ...cursos.map((c) => _CursoCard(
+                    curso: c,
+                    theme: theme,
+                    onTap: () => setState(() => _seleccionado = c),
+                  )),
+              _NuevoCursoCard(theme: theme, onTap: _abrirNuevoCurso),
+            ],
+          ),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _buildFiltros(AAMTheme theme) {
+    final maxGradeYear = _settings?.maxGradeYear ?? 7;
+    final maxDivision = _settings?.maxDivision ?? 4;
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        _filtroBox(theme, child: AAMDropdown<int?>(
+          value: _filtroAnioLectivo,
+          options: <int?>[null, ..._aniosLectivosDisponibles],
+          itemLabel: (a) => a == null ? 'Año lectivo: todos' : '$a',
+          onChanged: (v) => setState(() => _filtroAnioLectivo = v),
+        )),
+        _filtroBox(theme, child: AAMDropdown<int?>(
+          value: _filtroAnioCursada,
+          options: <int?>[null, ...List.generate(maxGradeYear, (i) => i + 1)],
+          itemLabel: (g) => g == null ? 'Año de cursada: todos' : gradeYearOrdinal(g),
+          onChanged: (v) => setState(() => _filtroAnioCursada = v),
+        )),
+        _filtroBox(theme, child: AAMDropdown<int?>(
+          value: _filtroDivision,
+          options: <int?>[null, ...List.generate(maxDivision, (i) => i + 1)],
+          itemLabel: (d) => d == null ? 'División: todas' : divisionOrdinal(d),
+          onChanged: (v) => setState(() => _filtroDivision = v),
+        )),
+        _filtroBox(theme, child: AAMDropdown<Specialty?>(
+          value: _filtroEspecialidad,
+          options: <Specialty?>[null, ..._especialidades],
+          itemLabel: (s) => s?.name ?? 'Especialidad: todas',
+          onChanged: (v) => setState(() => _filtroEspecialidad = v),
+        )),
+        _buildLimpiarFiltros(theme),
+      ],
+    );
+  }
+
+  bool get _hayFiltrosActivos =>
+      _filtroAnioLectivo != null || _filtroAnioCursada != null || _filtroDivision != null || _filtroEspecialidad != null;
+
+  void _limpiarFiltros() {
+    setState(() {
+      _filtroAnioLectivo = null;
+      _filtroAnioCursada = null;
+      _filtroDivision = null;
+      _filtroEspecialidad = null;
+    });
+  }
+
+  Widget _buildLimpiarFiltros(AAMTheme theme) {
+    final activo = _hayFiltrosActivos;
+    return GestureDetector(
+      onTap: activo ? _limpiarFiltros : null,
+      child: MouseRegion(
+        cursor: activo ? SystemMouseCursors.click : MouseCursor.defer,
+        child: Opacity(
+          opacity: activo ? 1 : 0.4,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.filter_alt_off_outlined, size: 16, color: AAMColors.danger),
+              const SizedBox(width: 6),
+              Text('Borrar filtros', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: AAMColors.danger)),
+            ]),
+          ),
+        ),
       ),
     );
   }
+
+  Widget _filtroBox(AAMTheme theme, {required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: theme.card,
+        border: Border.all(color: theme.borderCol),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: child,
+    );
+  }
 }
+
+// Altura fija compartida por _CursoCard y _NuevoCursoCard — sin esto, la
+// tarjeta punteada (con SizedBox propio) y las tarjetas reales (altura
+// dictada por su contenido) no coinciden y la fila queda dispareja.
+const double _kCourseCardHeight = 150;
 
 class _CursoCard extends StatefulWidget {
   const _CursoCard({required this.curso, required this.theme, required this.onTap});
@@ -139,7 +276,7 @@ class _CursoCardState extends State<_CursoCard> {
   Widget build(BuildContext context) {
     final theme = widget.theme;
     final curso = widget.curso;
-    final avatarSeed = curso.specialty ?? curso.name;
+    final avatarSeed = curso.specialtyName.isNotEmpty ? curso.specialtyName : curso.name;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -149,6 +286,7 @@ class _CursoCardState extends State<_CursoCard> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
           width: 240,
+          height: _kCourseCardHeight,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: theme.card,
@@ -165,7 +303,7 @@ class _CursoCardState extends State<_CursoCard> {
               ])),
             ]),
             const SizedBox(height: 12),
-            if (curso.specialty != null) AAMBadge(label: curso.specialty!, color: AAMColors.accent),
+            AAMBadge(label: curso.specialtyName, color: AAMColors.accent),
             const SizedBox(height: 12),
             Divider(height: 1, color: theme.borderCol),
             const SizedBox(height: 10),
@@ -192,7 +330,7 @@ class _NuevoCursoCard extends StatelessWidget {
           painter: _DashedRRectPainter(color: AAMColors.accent, radius: 16),
           child: SizedBox(
             width: 240,
-            height: 132,
+            height: _kCourseCardHeight,
             child: Center(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 const Icon(Icons.add, size: 20, color: AAMColors.accent),
@@ -207,36 +345,91 @@ class _NuevoCursoCard extends StatelessWidget {
   }
 }
 
-// ─── Alta de curso ──────────────────────────────────────────────────────────
-class _NuevoCursoForm extends StatefulWidget {
-  const _NuevoCursoForm({required this.ds});
+// ─── Alta / edición de curso ─────────────────────────────────────────────────
+/// Un solo formulario para ambos casos: `curso == null` es alta, `curso`
+/// seteado es edición (precarga los valores y llama a actualizarCurso).
+class _CursoForm extends StatefulWidget {
+  const _CursoForm({required this.ds, this.curso});
   final ApiDatasource ds;
+  final Course? curso;
 
   @override
-  State<_NuevoCursoForm> createState() => _NuevoCursoFormState();
+  State<_CursoForm> createState() => _CursoFormState();
 }
 
-class _NuevoCursoFormState extends State<_NuevoCursoForm> {
+class _CursoFormState extends State<_CursoForm> {
   late final TextEditingController _anioLectivoCtrl;
-  final _divisionCtrl = TextEditingController();
-  final _especialidadCtrl = TextEditingController();
   int? _gradeYear;
+  int? _division;
+  Specialty? _especialidadSel;
 
+  List<Specialty> _especialidades = [];
+  SchoolSettings? _settings;
+  bool _catalogosLoading = true;
   bool _submitting = false;
   String? _error;
+
+  bool get _esEdicion => widget.curso != null;
 
   @override
   void initState() {
     super.initState();
-    _anioLectivoCtrl = TextEditingController(text: '${DateTime.now().year}');
+    _anioLectivoCtrl = TextEditingController(text: '${widget.curso?.academicYear ?? DateTime.now().year}');
+    _gradeYear = widget.curso?.gradeYear;
+    _division = widget.curso?.division;
+    _cargarCatalogos();
   }
 
   @override
   void dispose() {
     _anioLectivoCtrl.dispose();
-    _divisionCtrl.dispose();
-    _especialidadCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _cargarCatalogos() async {
+    setState(() => _catalogosLoading = true);
+    try {
+      final results = await Future.wait([widget.ds.getSpecialties(), widget.ds.getSchoolSettings()]);
+      if (!mounted) return;
+      setState(() {
+        _especialidades = results[0] as List<Specialty>;
+        _settings = results[1] as SchoolSettings;
+        if (widget.curso != null) {
+          try {
+            _especialidadSel = _especialidades.firstWhere((s) => s.id == widget.curso!.specialtyId);
+          } catch (_) {}
+        }
+      });
+    } catch (_) {
+      if (mounted) setState(() => _error = 'No se pudieron cargar las especialidades / la configuración.');
+    } finally {
+      if (mounted) setState(() => _catalogosLoading = false);
+    }
+  }
+
+  // 1ro a 3ro = SIEMPRE "Ciclo Básico" (asignado solo, no elegible a mano);
+  // 4to en adelante = NUNCA "Ciclo Básico" (tiene que ser una especialidad real).
+  bool get _esCicloBasico => _gradeYear != null && _gradeYear! <= 3;
+
+  Specialty? get _cicloBasico {
+    try {
+      return _especialidades.firstWhere((s) => s.isBasicCycle);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<Specialty> get _especialidadesElegibles => _especialidades.where((s) => !s.isBasicCycle).toList();
+
+  void _onGradeYearChanged(int? v) {
+    setState(() {
+      _gradeYear = v;
+      if (_esCicloBasico) {
+        _especialidadSel = _cicloBasico;
+      } else if (_especialidadSel?.isBasicCycle == true) {
+        _especialidadSel = null;
+      }
+    });
   }
 
   Future<void> _submit() async {
@@ -249,9 +442,15 @@ class _NuevoCursoFormState extends State<_NuevoCursoForm> {
       setState(() => _error = 'Seleccioná el año de cursada.');
       return;
     }
-    final division = int.tryParse(_divisionCtrl.text.trim());
-    if (division == null || division <= 0) {
-      setState(() => _error = 'Ingresá una división válida (número mayor a 0).');
+    if (_division == null) {
+      setState(() => _error = 'Seleccioná la división.');
+      return;
+    }
+    final especialidad = _esCicloBasico ? _cicloBasico : _especialidadSel;
+    if (especialidad == null) {
+      setState(() => _error = _esCicloBasico
+          ? 'No se encontró la especialidad "Ciclo Básico" en el catálogo.'
+          : 'Seleccioná la especialidad.');
       return;
     }
     setState(() {
@@ -259,13 +458,20 @@ class _NuevoCursoFormState extends State<_NuevoCursoForm> {
       _error = null;
     });
     try {
-      await widget.ds.crearCurso(
-        academicYear: anio,
-        gradeYear: _gradeYear!,
-        division: division,
-        specialty: _especialidadCtrl.text.trim().isEmpty ? null : _especialidadCtrl.text.trim(),
-      );
-      if (mounted) Navigator.of(context).pop(true);
+      final Course resultado;
+      if (_esEdicion) {
+        resultado = await widget.ds.actualizarCurso(
+          id: widget.curso!.id,
+          academicYear: anio, gradeYear: _gradeYear!, division: _division!,
+          specialtyId: especialidad.id,
+        );
+      } else {
+        resultado = await widget.ds.crearCurso(
+          academicYear: anio, gradeYear: _gradeYear!, division: _division!,
+          specialtyId: especialidad.id,
+        );
+      }
+      if (mounted) Navigator.of(context).pop(resultado);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -275,102 +481,72 @@ class _NuevoCursoFormState extends State<_NuevoCursoForm> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: AAMTheme(),
-      builder: (context, _) {
-        final theme = AAMTheme();
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            width: 480,
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: theme.card,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [BoxShadow(color: Colors.black.withAlpha((0.12 * 255).round()), blurRadius: 32, offset: const Offset(0, 8))],
-            ),
-            child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Container(
-                    width: 36, height: 36,
-                    decoration: BoxDecoration(color: AAMColors.primary, borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.school_outlined, size: 18, color: AAMColors.white),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text('Nuevo curso',
-                      style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w700, color: theme.text))),
-                  GestureDetector(
-                    onTap: () => Navigator.of(context).pop(false),
-                    child: Container(
-                      width: 30, height: 30,
-                      decoration: BoxDecoration(color: theme.surfaceCol, borderRadius: BorderRadius.circular(8)),
-                      child: Icon(Icons.close, size: 16, color: theme.textSec),
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 24),
-                Row(children: [
-                  Expanded(child: _FieldGroup(label: 'Año lectivo',
-                      child: _textInput(_anioLectivoCtrl, 'Ej: 2026', keyboard: TextInputType.number))),
-                  const SizedBox(width: 16),
-                  Expanded(child: _DropdownGroup<int>(
-                    label: 'Año de cursada',
-                    value: _gradeYear,
-                    options: const [1, 2, 3, 4, 5, 6, 7],
-                    hint: 'Año de cursada',
-                    itemLabel: gradeYearOrdinal,
-                    onChanged: (v) => setState(() => _gradeYear = v),
-                  )),
-                ]),
-                const SizedBox(height: 16),
-                _FieldGroup(label: 'División',
-                    child: _textInput(_divisionCtrl, 'Ej: 1', keyboard: TextInputType.number)),
-                const SizedBox(height: 16),
-                _FieldGroup(label: 'Especialidad (opcional)',
-                    child: _textInput(_especialidadCtrl, 'Ej: Informática — vacío si es ciclo básico')),
-
-                if (_error != null) ...[
-                  const SizedBox(height: 14),
-                  Text(_error!, style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.danger)),
-                ],
-                const SizedBox(height: 24),
-                Row(children: [
-                  Expanded(child: GestureDetector(
-                    onTap: () => Navigator.of(context).pop(false),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(10)),
-                      child: Center(child: Text('Cancelar', style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec))),
-                    ),
-                  )),
-                  const SizedBox(width: 14),
-                  Expanded(child: GestureDetector(
-                    onTap: _submitting ? null : _submit,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(color: _submitting ? AAMColors.accent.withAlpha((0.6 * 255).round()) : AAMColors.accent, borderRadius: BorderRadius.circular(10)),
-                      child: Center(child: _submitting
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: AAMColors.white, strokeWidth: 2))
-                          : Text('Crear curso', style: GoogleFonts.dmSans(fontSize: 14, color: AAMColors.white))),
-                    ),
-                  )),
-                ]),
-              ]),
-            ),
+    final theme = AAMTheme();
+    if (_catalogosLoading) {
+      return const Dialog(backgroundColor: Colors.transparent, child: Padding(padding: EdgeInsets.all(40), child: AAMLoadingScreen()));
+    }
+    final maxGradeYear = _settings?.maxGradeYear ?? 7;
+    final maxDivision = _settings?.maxDivision ?? 4;
+    return _FormDialog(
+      theme: theme,
+      icon: Icons.school_outlined,
+      titulo: _esEdicion ? 'Editar curso' : 'Nuevo curso',
+      error: _error,
+      submitting: _submitting,
+      onCancel: () => Navigator.of(context).pop(),
+      onSubmit: _submit,
+      submitLabel: _esEdicion ? 'Guardar cambios' : 'Crear curso',
+      children: [
+        Row(children: [
+          Expanded(child: _FieldGroup(label: 'Año lectivo',
+              child: _textInput(_anioLectivoCtrl, 'Ej: 2026', keyboard: TextInputType.number))),
+          const SizedBox(width: 16),
+          Expanded(child: AAMLabeledDropdown<int>(
+            label: 'Año de cursada',
+            value: _gradeYear,
+            options: List.generate(maxGradeYear, (i) => i + 1),
+            hint: 'Año de cursada',
+            itemLabel: gradeYearOrdinal,
+            onChanged: _onGradeYearChanged,
+          )),
+        ]),
+        const SizedBox(height: 16),
+        AAMLabeledDropdown<int>(
+          label: 'División',
+          value: _division,
+          options: List.generate(maxDivision, (i) => i + 1),
+          hint: 'División',
+          itemLabel: divisionOrdinal,
+          onChanged: (v) => setState(() => _division = v),
+        ),
+        const SizedBox(height: 16),
+        if (_esCicloBasico)
+          _FieldGroup(label: 'Especialidad', child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(color: theme.surfaceCol, borderRadius: BorderRadius.circular(10)),
+            child: Text('Ciclo Básico (automático)', style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec)),
+          ))
+        else
+          AAMLabeledDropdown<Specialty>(
+            label: 'Especialidad',
+            value: _especialidadSel,
+            options: _especialidadesElegibles,
+            hint: _gradeYear == null ? 'Elegí primero el año de cursada' : 'Especialidad',
+            itemLabel: (s) => s.name,
+            onChanged: _gradeYear == null ? null : (v) => setState(() => _especialidadSel = v),
           ),
-        );
-      },
+      ],
     );
   }
 }
 
 // ─── Detalle de curso (lista + tabs) ────────────────────────────────────────
 class _CursoDetalle extends StatefulWidget {
-  const _CursoDetalle({required this.curso, required this.ds, required this.onBack});
+  const _CursoDetalle({required this.curso, required this.ds, required this.onBack, required this.onCursoActualizado});
   final Course curso;
   final ApiDatasource ds;
   final VoidCallback onBack;
+  final ValueChanged<Course> onCursoActualizado;
 
   @override
   State<_CursoDetalle> createState() => _CursoDetalleState();
@@ -393,7 +569,7 @@ class _CursoDetalleState extends State<_CursoDetalle> {
             child: Padding(
               padding: const EdgeInsets.all(32),
               child: switch (_tabIndex) {
-                0 => _TabDatosGenerales(curso: widget.curso),
+                0 => _TabDatosGenerales(curso: widget.curso, ds: widget.ds, onCursoActualizado: widget.onCursoActualizado),
                 1 => _TabHorario(curso: widget.curso, ds: widget.ds),
                 2 => _TabMaterias(curso: widget.curso, ds: widget.ds),
                 _ => _TabPreceptores(curso: widget.curso, ds: widget.ds),
@@ -421,10 +597,8 @@ class _CursoDetalleState extends State<_CursoDetalle> {
         const SizedBox(width: 16),
         Text(widget.curso.name,
             style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w700, color: theme.text)),
-        if (widget.curso.specialty != null) ...[
-          const SizedBox(width: 10),
-          AAMBadge(label: widget.curso.specialty!, color: AAMColors.accent),
-        ],
+        const SizedBox(width: 10),
+        AAMBadge(label: widget.curso.specialtyName, color: AAMColors.accent),
       ]),
     );
   }
@@ -453,25 +627,41 @@ class _CursoDetalleState extends State<_CursoDetalle> {
 
 // ─── Tab: Datos generales ────────────────────────────────────────────────────
 class _TabDatosGenerales extends StatelessWidget {
-  const _TabDatosGenerales({required this.curso});
+  const _TabDatosGenerales({required this.curso, required this.ds, required this.onCursoActualizado});
   final Course curso;
+  final ApiDatasource ds;
+  final ValueChanged<Course> onCursoActualizado;
+
+  Future<void> _editar(BuildContext context) async {
+    final resultado = await showDialog<Course>(
+      context: context,
+      barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
+      builder: (_) => _CursoForm(ds: ds, curso: curso),
+    );
+    if (resultado != null) onCursoActualizado(resultado);
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = AAMTheme();
-    return _SectionCard(theme: theme, title: 'Datos del curso', children: [
-      Row(children: [
-        Expanded(child: _DetalleCampo(label: 'Año lectivo', valor: '${curso.academicYear}', theme: theme)),
-        Expanded(child: _DetalleCampo(label: 'Año de cursada', valor: gradeYearOrdinal(curso.gradeYear), theme: theme)),
-      ]),
-      const SizedBox(height: 20),
-      Row(children: [
-        Expanded(child: _DetalleCampo(label: 'División', valor: divisionOrdinal(curso.division), theme: theme)),
-        Expanded(child: _DetalleCampo(label: 'Especialidad', valor: curso.specialty ?? 'Ciclo básico (sin especialidad)', theme: theme)),
-      ]),
-      const SizedBox(height: 20),
-      _DetalleCampo(label: 'Total de alumnos', valor: '${curso.totalStudents}', theme: theme),
-    ]);
+    return _SectionCard(
+      theme: theme,
+      title: 'Datos del curso',
+      action: _DashedButton(label: 'Editar', onTap: () => _editar(context)),
+      children: [
+        Row(children: [
+          Expanded(child: _DetalleCampo(label: 'Año lectivo', valor: '${curso.academicYear}', theme: theme)),
+          Expanded(child: _DetalleCampo(label: 'Año de cursada', valor: gradeYearOrdinal(curso.gradeYear), theme: theme)),
+        ]),
+        const SizedBox(height: 20),
+        Row(children: [
+          Expanded(child: _DetalleCampo(label: 'División', valor: divisionOrdinal(curso.division), theme: theme)),
+          Expanded(child: _DetalleCampo(label: 'Especialidad', valor: curso.specialtyName, theme: theme)),
+        ]),
+        const SizedBox(height: 20),
+        _DetalleCampo(label: 'Total de alumnos', valor: '${curso.totalStudents}', theme: theme),
+      ],
+    );
   }
 }
 
@@ -565,14 +755,14 @@ class _TabHorarioState extends State<_TabHorario> {
 
   Future<void> _eliminarFranja(TimeSlot slot) async {
     final ok = await _confirmarEliminacion(context,
-        titulo: 'Eliminar franja horaria',
-        mensaje: '¿Eliminar la franja del ${_diaLabel(slot.dayOfWeek)} ${slot.startTime.label}–${slot.endTime.label}?');
+        titulo: 'Eliminar horario',
+        mensaje: '¿Eliminar el horario del ${_diaLabel(slot.dayOfWeek)} ${slot.startTime.label}–${slot.endTime.label}?');
     if (!ok) return;
     try {
       await widget.ds.eliminarTimeSlot(widget.curso.id, slot.id);
       _cargar();
     } catch (_) {
-      if (mounted) setState(() => _error = 'No se pudo eliminar la franja horaria.');
+      if (mounted) setState(() => _error = 'No se pudo eliminar el horario.');
     }
   }
 
@@ -597,14 +787,14 @@ class _TabHorarioState extends State<_TabHorario> {
 
   Future<void> _eliminarPeriodo(ClassPeriod p) async {
     final ok = await _confirmarEliminacion(context,
-        titulo: 'Eliminar período',
-        mensaje: '¿Eliminar el período del ${_diaLabel(p.dayOfWeek)} ${p.startTime.label}–${p.endTime.label}?');
+        titulo: 'Eliminar hora de clase',
+        mensaje: '¿Eliminar la hora de clase del ${_diaLabel(p.dayOfWeek)} ${p.startTime.label}–${p.endTime.label}?');
     if (!ok) return;
     try {
       await widget.ds.eliminarClassPeriod(widget.curso.id, p.id);
       _cargar();
     } catch (_) {
-      if (mounted) setState(() => _error = 'No se pudo eliminar el período.');
+      if (mounted) setState(() => _error = 'No se pudo eliminar la hora de clase.');
     }
   }
 
@@ -632,23 +822,32 @@ class _TabHorarioState extends State<_TabHorario> {
           Text(_error!, style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.danger)),
           const SizedBox(height: 16),
         ],
-        Row(children: [
-          Expanded(child: Text('Turno principal', style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700, color: theme.text))),
-          _DashedButton(label: 'Agregar franja', onTap: _agregarFranja),
-        ]),
-        const SizedBox(height: 12),
-        if (turno.isEmpty)
-          _EmptyRow(theme: theme, mensaje: 'Sin franjas horarias cargadas.')
-        else
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(color: theme.card, border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(12)),
-            child: Column(children: turno.map((s) => _FranjaRow(slot: s, theme: theme, onDelete: () => _eliminarFranja(s))).toList()),
-          ),
+        _SectionCard(
+          theme: theme,
+          title: 'Horario semanal',
+          subtitle: 'Los días y horarios en que el curso tiene clase, con el turno y el tipo de '
+              'actividad de cada uno. Es el mismo para los dos grupos.',
+          action: _DashedButton(label: 'Agregar horario', onTap: _agregarFranja),
+          children: [
+            if (turno.isEmpty)
+              _EmptyRow(theme: theme, mensaje: 'Sin horarios cargados.')
+            else ...[
+              const AAMTableHeader(columns: [
+                ('Día', 2),
+                ('Horario', 3),
+                ('Turno', 2),
+                ('Actividad', 3),
+                ('Tolerancia', 2),
+                ('', 1),
+              ]),
+              ...turno.map((s) => _FranjaRow(slot: s, theme: theme, onDelete: () => _eliminarFranja(s))),
+            ],
+          ],
+        ),
         const SizedBox(height: 28),
         Row(children: [
           Expanded(child: Text('Horario detallado', style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700, color: theme.text))),
-          _DashedButton(label: 'Agregar período', onTap: _agregarPeriodo),
+          _DashedButton(label: 'Agregar hora de clase', onTap: _agregarPeriodo),
         ]),
         const SizedBox(height: 12),
         if (_grupos.isNotEmpty) ...[
@@ -671,6 +870,15 @@ class _TabHorarioState extends State<_TabHorario> {
   }
 }
 
+/// Color por turno — mismo criterio que usa el resto de la pantalla
+/// (paleta reciclada de AAMColors, sin hex nuevos): mañana/tarde/noche
+/// quedan visualmente distinguibles entre sí en la tabla.
+Color _shiftColor(ShiftType s) => switch (s) {
+      ShiftType.morning => AAMColors.info,
+      ShiftType.afternoon => AAMColors.violet,
+      ShiftType.evening => AAMColors.indigo,
+    };
+
 class _FranjaRow extends StatelessWidget {
   const _FranjaRow({required this.slot, required this.theme, required this.onDelete});
   final TimeSlot slot;
@@ -679,19 +887,31 @@ class _FranjaRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // `_turnoPrincipal` es course_id-scoped: por CHECK de la DB solo puede
+    // traer main_shift/after_shift acá (workshop es workshop_group_id-scoped
+    // y vive en el horario detallado) — igual usamos la etiqueta real en vez
+    // de asumir un valor fijo, por si el dominio cambia más adelante.
+    final esCurricular = slot.activityType == ActivityType.mainShift;
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(border: Border(bottom: BorderSide(color: theme.borderCol, width: 1))),
       child: Row(children: [
-        SizedBox(width: 90, child: Text(_diaLabel(slot.dayOfWeek), style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: theme.text))),
-        SizedBox(width: 130, child: Text('${slot.startTime.label} – ${slot.endTime.label}', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec))),
-        SizedBox(width: 100, child: AAMBadge(label: shiftTypeLabel(slot.shift), color: AAMColors.info)),
-        const SizedBox(width: 12),
-        Expanded(child: Text(activityTypeLabel(slot.activityType), style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec))),
-        if (slot.lateToleranceMinutes > 0)
-          Text('Tolerancia: ${slot.lateToleranceMinutes} min', style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec)),
-        const SizedBox(width: 12),
-        GestureDetector(onTap: onDelete, child: const Icon(Icons.delete_outline, size: 18, color: AAMColors.danger)),
+        Expanded(flex: 2, child: Text(_diaLabel(slot.dayOfWeek), style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: theme.text))),
+        Expanded(flex: 3, child: Text('${slot.startTime.label} – ${slot.endTime.label}', style: GoogleFonts.dmSans(fontSize: 13, color: theme.text))),
+        Expanded(flex: 2, child: Align(alignment: Alignment.centerLeft,
+          child: AAMBadge(label: shiftTypeLabel(slot.shift), color: _shiftColor(slot.shift)))),
+        Expanded(flex: 3, child: esCurricular
+          ? Text('Curricular', style: GoogleFonts.dmSans(fontSize: 13, color: theme.text))
+          : Row(mainAxisSize: MainAxisSize.min, children: [
+              Container(width: 8, height: 8, decoration: const BoxDecoration(color: AAMColors.teal, shape: BoxShape.circle)),
+              const SizedBox(width: 8),
+              Text(activityTypeLabel(slot.activityType), style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: theme.text)),
+            ])),
+        Expanded(flex: 2, child: Text(
+          slot.lateToleranceMinutes > 0 ? '${slot.lateToleranceMinutes} min' : '—',
+          style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
+        )),
+        Expanded(flex: 1, child: GestureDetector(onTap: onDelete, child: const Icon(Icons.delete_outline, size: 18, color: AAMColors.danger))),
       ]),
     );
   }
@@ -976,26 +1196,26 @@ class _NuevaFranjaFormState extends State<_NuevaFranjaForm> {
     return _FormDialog(
       theme: theme,
       icon: Icons.schedule_outlined,
-      titulo: 'Nueva franja horaria',
+      titulo: 'Nuevo horario',
       error: _error,
       submitting: _submitting,
       onCancel: () => Navigator.of(context).pop(false),
       onSubmit: _submit,
-      submitLabel: 'Crear franja',
+      submitLabel: 'Crear horario',
       children: [
         Row(children: [
-          Expanded(child: _DropdownGroup<int>(
+          Expanded(child: AAMLabeledDropdown<int>(
             label: 'Día', value: _dayOfWeek, options: const [1, 2, 3, 4, 5, 6, 7],
             hint: 'Día', itemLabel: _diaLabel, onChanged: (v) => setState(() => _dayOfWeek = v),
           )),
           const SizedBox(width: 16),
-          Expanded(child: _DropdownGroup<ShiftType>(
+          Expanded(child: AAMLabeledDropdown<ShiftType>(
             label: 'Turno', value: _shift, options: ShiftType.values,
             itemLabel: shiftTypeLabel, onChanged: (v) => setState(() => _shift = v!),
           )),
         ]),
         const SizedBox(height: 16),
-        _DropdownGroup<ActivityType>(
+        AAMLabeledDropdown<ActivityType>(
           label: 'Tipo de actividad',
           value: _activityType,
           options: const [ActivityType.mainShift, ActivityType.afterShift],
@@ -1123,15 +1343,15 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
     return _FormDialog(
       theme: theme,
       icon: Icons.event_note_outlined,
-      titulo: 'Nuevo período',
+      titulo: 'Nueva hora de clase',
       error: _error,
       submitting: _submitting,
       onCancel: () => Navigator.of(context).pop(false),
       onSubmit: _submit,
-      submitLabel: 'Crear período',
+      submitLabel: 'Crear hora de clase',
       children: [
         if (widget.grupos.isNotEmpty) ...[
-          _DropdownGroup<WorkshopGroup?>(
+          AAMLabeledDropdown<WorkshopGroup?>(
             label: 'Alcance',
             value: _grupoSel,
             options: <WorkshopGroup?>[null, ...widget.grupos],
@@ -1141,19 +1361,19 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
           const SizedBox(height: 16),
         ],
         Row(children: [
-          Expanded(child: _DropdownGroup<int>(
+          Expanded(child: AAMLabeledDropdown<int>(
             label: 'Día', value: _dayOfWeek, options: const [1, 2, 3, 4, 5, 6, 7],
             hint: 'Día', itemLabel: _diaLabel, onChanged: (v) => setState(() => _dayOfWeek = v),
           )),
           const SizedBox(width: 16),
-          Expanded(child: _DropdownGroup<ShiftType>(
+          Expanded(child: AAMLabeledDropdown<ShiftType>(
             label: 'Turno', value: _shift, options: ShiftType.values,
             itemLabel: shiftTypeLabel, onChanged: (v) => setState(() => _shift = v!),
           )),
         ]),
         const SizedBox(height: 16),
-        _DropdownGroup<PeriodType>(
-          label: 'Tipo de período',
+        AAMLabeledDropdown<PeriodType>(
+          label: 'Tipo',
           value: _periodType,
           options: PeriodType.values,
           itemLabel: periodTypeLabel,
@@ -1173,7 +1393,7 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
         ]),
         if (_periodType == PeriodType.lesson) ...[
           const SizedBox(height: 16),
-          _DropdownGroup<SubjectTeacherAssignment>(
+          AAMLabeledDropdown<SubjectTeacherAssignment>(
             label: 'Materia',
             value: _materiaSel,
             options: widget.materias,
@@ -1182,7 +1402,7 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
             onChanged: _onMateriaChanged,
           ),
           const SizedBox(height: 16),
-          _DropdownGroup<Teacher>(
+          AAMLabeledDropdown<Teacher>(
             label: 'Profesor a cargo (cambiá acá si es un reemplazo puntual)',
             value: _profesorSel,
             options: widget.profesores,
@@ -1435,7 +1655,7 @@ class _AsignarMateriaFormState extends State<_AsignarMateriaForm> {
       submitLabel: 'Asignar',
       children: [
         Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Expanded(child: _DropdownGroup<Subject>(
+          Expanded(child: AAMLabeledDropdown<Subject>(
             label: 'Materia', value: _materiaSel, options: _materias,
             hint: 'Materia', itemLabel: (m) => m.name, onChanged: (v) => setState(() => _materiaSel = v),
           )),
@@ -1444,7 +1664,7 @@ class _AsignarMateriaFormState extends State<_AsignarMateriaForm> {
         ]),
         const SizedBox(height: 16),
         Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Expanded(child: _DropdownGroup<Teacher>(
+          Expanded(child: AAMLabeledDropdown<Teacher>(
             label: 'Profesor', value: _profesorSel, options: _profesores,
             hint: 'Profesor', itemLabel: (t) => t.fullName, onChanged: (v) => setState(() => _profesorSel = v),
           )),
@@ -1805,7 +2025,7 @@ class _AsignarPreceptorFormState extends State<_AsignarPreceptorForm> {
       onSubmit: _submit,
       submitLabel: 'Asignar',
       children: [
-        _DropdownGroup<User>(
+        AAMLabeledDropdown<User>(
           label: 'Preceptor',
           value: _preceptorSel,
           options: widget.preceptores,
@@ -1938,12 +2158,12 @@ class _NuevoReemplazoFormState extends State<_NuevoReemplazoForm> {
       onSubmit: _submit,
       submitLabel: 'Crear reemplazo',
       children: [
-        _DropdownGroup<ShiftType>(
+        AAMLabeledDropdown<ShiftType>(
           label: 'Turno', value: _shift, options: widget.turnos,
           hint: 'Turno', itemLabel: shiftTypeLabel, onChanged: (v) => setState(() => _shift = v),
         ),
         const SizedBox(height: 16),
-        _DropdownGroup<User>(
+        AAMLabeledDropdown<User>(
           label: 'Preceptor reemplazante', value: _preceptorSel, options: widget.preceptores,
           hint: 'Preceptor', itemLabel: (u) => u.fullName, onChanged: (v) => setState(() => _preceptorSel = v),
         ),
@@ -1958,7 +2178,7 @@ class _NuevoReemplazoFormState extends State<_NuevoReemplazoForm> {
         const SizedBox(height: 16),
         _FieldGroup(label: 'Motivo (opcional)', child: _textInput(_motivoCtrl, 'Ej: Licencia médica')),
         const SizedBox(height: 16),
-        _DropdownGroup<User>(
+        AAMLabeledDropdown<User>(
           label: 'Registrado por', value: _registradoPor, options: widget.usuarios,
           hint: 'Quién registra esta asignación', itemLabel: (u) => u.fullName, onChanged: (v) => setState(() => _registradoPor = v),
         ),
@@ -1973,8 +2193,8 @@ const List<String> _diasLabels = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Vi
 String _diaLabel(int d) => (d >= 1 && d <= 7) ? _diasLabels[d - 1] : 'Día $d';
 
 Future<ClockTime?> _pickTime(BuildContext context, ClockTime? initial) async {
-  final t = await showTimePicker(
-    context: context,
+  final t = await aamShowTimePicker(
+    context,
     initialTime: initial != null ? TimeOfDay(hour: initial.hour, minute: initial.minute) : const TimeOfDay(hour: 8, minute: 0),
   );
   if (t == null) return null;
@@ -1982,8 +2202,8 @@ Future<ClockTime?> _pickTime(BuildContext context, ClockTime? initial) async {
 }
 
 Future<DateTime?> _pickDate(BuildContext context, {DateTime? initial, DateTime? firstDate, DateTime? lastDate}) {
-  return showDatePicker(
-    context: context,
+  return aamShowDatePicker(
+    context,
     initialDate: initial ?? DateTime.now(),
     firstDate: firstDate ?? DateTime(2000),
     lastDate: lastDate ?? DateTime(2100),
@@ -2067,39 +2287,6 @@ class _FieldGroup extends StatelessWidget {
       Text(label, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: theme.textSec)),
       const SizedBox(height: 6),
       child,
-    ]);
-  }
-}
-
-class _DropdownGroup<T> extends StatelessWidget {
-  const _DropdownGroup({required this.label, required this.value, required this.options, required this.onChanged, this.hint, this.itemLabel});
-  final String label;
-  final T? value;
-  final List<T> options;
-  final ValueChanged<T?>? onChanged;
-  final String? hint;
-  final String Function(T)? itemLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = AAMTheme();
-    final habilitado = onChanged != null && options.isNotEmpty;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: theme.textSec)),
-      const SizedBox(height: 6),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(10)),
-        child: DropdownButton<T>(
-          value: value,
-          underline: const SizedBox.shrink(),
-          isExpanded: true,
-          hint: Text(hint ?? 'Seleccionar', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
-          style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
-          items: options.map((o) => DropdownMenuItem(value: o, child: Text(itemLabel != null ? itemLabel!(o) : o.toString()))).toList(),
-          onChanged: habilitado ? onChanged : null,
-        ),
-      ),
     ]);
   }
 }
@@ -2298,11 +2485,12 @@ class _DashedAddRow extends StatelessWidget {
 }
 
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.theme, required this.title, required this.children, this.action});
+  const _SectionCard({required this.theme, required this.title, required this.children, this.action, this.subtitle});
   final AAMTheme theme;
   final String title;
   final List<Widget> children;
   final Widget? action;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -2316,9 +2504,13 @@ class _SectionCard extends StatelessWidget {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Expanded(child: Text(title, style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700, color: theme.text))),
+          Expanded(child: Text(title, style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w700, color: theme.text))),
           if (action != null) action!,
         ]),
+        if (subtitle != null) ...[
+          const SizedBox(height: 6),
+          Text(subtitle!, style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec, height: 1.4)),
+        ],
         const SizedBox(height: 16),
         ...children,
       ]),

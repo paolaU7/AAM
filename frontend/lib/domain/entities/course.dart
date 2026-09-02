@@ -3,15 +3,18 @@
 /// Reflects the current DB schema: a course is the combination of three
 /// independent numeric dimensions — academic year (calendar year), grade
 /// year (1..7, "1ro".."7mo") and division (1, 2, 3..., "1ra", "2da"...) —
-/// unique as a triple. The readable label ("1ro 2da (2026)") is not stored
-/// in the DB; it's derived here from those three numbers.
+/// unique as a triple. `specialtyId` es SIEMPRE obligatorio (1ro-3ro ->
+/// "Ciclo Básico", asignado solo por la UI, nunca a mano). The readable
+/// label ("1ro 2da (2026)") is not stored in the DB; it's derived here
+/// from those three numbers.
 class Course {
   const Course({
     required this.id,
     required this.academicYear,
     required this.gradeYear,
     required this.division,
-    this.specialty,
+    required this.specialtyId,
+    required this.specialtyName,
     this.totalStudents = 0,
     String? name,
     String? schedule,
@@ -22,7 +25,8 @@ class Course {
   final int academicYear;   // calendar year, e.g. 2026
   final int gradeYear;      // 1..7 ("1ro".."7mo")
   final int division;       // 1, 2, 3... ("1ra", "2da"...)
-  final String? specialty;  // nullable — el ciclo básico no tiene especialidad
+  final String specialtyId;
+  final String specialtyName;
   final int totalStudents;
 
   // Provided by the backend if it already computes a label; derived otherwise.
@@ -43,20 +47,22 @@ class Course {
     int? academicYear,
     int? gradeYear,
     int? division,
-    String? specialty,
+    String? specialtyId,
+    String? specialtyName,
     int? totalStudents,
     String? name,
     String? schedule,
   }) {
     return Course(
-      id:            id            ?? this.id,
-      academicYear:  academicYear  ?? this.academicYear,
-      gradeYear:     gradeYear     ?? this.gradeYear,
-      division:      division      ?? this.division,
-      specialty:     specialty     ?? this.specialty,
-      totalStudents: totalStudents ?? this.totalStudents,
-      name:          name          ?? _name,
-      schedule:      schedule      ?? _schedule,
+      id:             id             ?? this.id,
+      academicYear:   academicYear   ?? this.academicYear,
+      gradeYear:      gradeYear      ?? this.gradeYear,
+      division:       division       ?? this.division,
+      specialtyId:    specialtyId    ?? this.specialtyId,
+      specialtyName:  specialtyName  ?? this.specialtyName,
+      totalStudents:  totalStudents  ?? this.totalStudents,
+      name:           name           ?? _name,
+      schedule:       schedule       ?? _schedule,
     );
   }
 }

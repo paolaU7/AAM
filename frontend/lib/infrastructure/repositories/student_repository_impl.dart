@@ -62,4 +62,7 @@ class StudentRepositoryImpl implements StudentRepository {
 
   @override
   Future<Student> actualizarAlumno(Student alumno) => _datasource.actualizarAlumno(alumno);
+
+  @override
+  Future<Student> toggleActive(String id) => _datasource.toggleActiveAlumno(id);
 }

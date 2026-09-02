@@ -14,6 +14,7 @@ class StudentModel(Base):
     course_id            = Column(String(36), ForeignKey("courses.id"), nullable=False)
     workshop_group_id    = Column(String(36), ForeignKey("workshop_groups.id"), nullable=True)  # 1 grupo, dentro de su curso
     is_repeating_student = Column(Boolean, nullable=False, default=False)
+    is_active            = Column(Boolean, nullable=False, default=True)
     created_at           = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at           = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 

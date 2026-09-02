@@ -1,7 +1,7 @@
 import enum
 from sqlalchemy import (
     Column, String, Text, TIMESTAMP, Time, SmallInteger, Boolean, ForeignKey,
-    Enum, UniqueConstraint, CheckConstraint,
+    Enum, CheckConstraint,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -50,14 +50,19 @@ class PeriodTypeEnum(enum.Enum):
 
 class ClassPeriodModel(Base):
     """Horario académico DETALLADO día por día — distinto de `time_slots`
-    (que solo abre/cierra el turno de asistencia). Exactamente uno de
-    course_id / workshop_group_id está seteado: la parte curricular es
-    course_id-scoped (compartida por todos los grupos de taller del curso),
-    el contraturno es workshop_group_id-scoped (una grilla por grupo)."""
+    (que solo abre/cierra el turno de asistencia). `course_id` SIEMPRE está
+    seteado (todo período pertenece a un curso); `workshop_group_id` es
+    opcional y, cuando está seteado, acota el período a UN grupo de taller
+    puntual dentro de ese mismo curso (contraturno). La unicidad real
+    (curricular vs. taller) vive en dos índices únicos parciales en la DB
+    (`idx_class_periods_curricular_unique` / `..._workshop_unique`, no
+    modelados acá como UniqueConstraint porque SQLAlchemy no declara
+    índices parciales vía table_args de forma directa), y la consistencia
+    grupo↔curso la valida un trigger (`enforce_class_period_workshop_group_course`)."""
     __tablename__ = "class_periods"
 
     id                 = Column(String(36), primary_key=True, server_default=func.gen_random_uuid())
-    course_id          = Column(String(36), ForeignKey("courses.id", ondelete="CASCADE"), nullable=True)
+    course_id          = Column(String(36), ForeignKey("courses.id", ondelete="CASCADE"), nullable=False)
     workshop_group_id  = Column(String(36), ForeignKey("workshop_groups.id", ondelete="CASCADE"), nullable=True)
     day_of_week        = Column(SmallInteger, nullable=False)  # ISO: 1 = lunes
     shift               = Column(Enum(ShiftTypeEnum, name="shift_type"), nullable=False)
@@ -81,11 +86,4 @@ class ClassPeriodModel(Base):
     __table_args__ = (
         CheckConstraint("day_of_week BETWEEN 1 AND 7", name="ck_class_periods_day_of_week"),
         CheckConstraint("end_time > start_time", name="ck_class_periods_time_order"),
-        CheckConstraint(
-            "(course_id IS NOT NULL AND workshop_group_id IS NULL)"
-            " OR (course_id IS NULL AND workshop_group_id IS NOT NULL)",
-            name="ck_class_periods_course_xor_workshop",
-        ),
-        UniqueConstraint("course_id", "day_of_week", "shift", "period_order", name="uq_class_periods_order_course"),
-        UniqueConstraint("workshop_group_id", "day_of_week", "shift", "period_order", name="uq_class_periods_order_workshop"),
     )

@@ -200,11 +200,11 @@ class _AsistenciaScreenState extends State<AsistenciaScreen> {
         if (cursos.isEmpty)
           Text('Sin cursos cargados', style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec))
         else
-          DropdownButton<Course>(
+          AAMDropdown<Course>(
             value: _cursoSeleccionado,
-            underline: const SizedBox.shrink(),
-            style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: theme.text),
-            items: cursos.map((c) => DropdownMenuItem(value: c, child: Text(c.name))).toList(),
+            options: cursos,
+            itemLabel: (c) => c.name,
+            fontWeight: FontWeight.w700,
             onChanged: (c) { if (c != null) _onCursoChanged(c); },
           ),
         const Spacer(),
@@ -307,22 +307,35 @@ class _MiniStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: color.withAlpha((0.08 * 255).round()),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withAlpha((0.15 * 255).round())),
-        ),
-        child: Row(children: [
-          Text(value, style: GoogleFonts.dmSans(fontSize: 24, fontWeight: FontWeight.w700, color: color)),
-          const SizedBox(width: 8),
-          Flexible(child: Text(label,
-            style: GoogleFonts.dmSans(fontSize: 12, color: AAMColors.textSec),
-            overflow: TextOverflow.ellipsis)),
-        ]),
-      ),
+    return AnimatedBuilder(
+      animation: AAMTheme(),
+      builder: (context, _) {
+        final theme = AAMTheme();
+        // Acentos oscuros (p.ej. AAMColors.primary) pierden contraste contra
+        // un fondo también oscuro en modo oscuro — los aclaramos un poco; el
+        // tinte de fondo también necesita más opacidad para notarse sobre
+        // una superficie oscura.
+        final textColor = theme.isDark ? Color.lerp(color, AAMColors.white, 0.35)! : color;
+        final bgAlpha = theme.isDark ? 0.18 : 0.08;
+        final borderAlpha = theme.isDark ? 0.32 : 0.15;
+        return Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: color.withAlpha((bgAlpha * 255).round()),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withAlpha((borderAlpha * 255).round())),
+            ),
+            child: Row(children: [
+              Text(value, style: GoogleFonts.dmSans(fontSize: 24, fontWeight: FontWeight.w700, color: textColor)),
+              const SizedBox(width: 8),
+              Flexible(child: Text(label,
+                style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec),
+                overflow: TextOverflow.ellipsis)),
+            ]),
+          ),
+        );
+      },
     );
   }
 }
@@ -590,18 +603,14 @@ class _IngresoManualModalState extends State<_IngresoManualModal> {
               _dropdownContainer(
                 theme,
                 enabled: !_alumnosLoading && _alumnos.isNotEmpty,
-                child: DropdownButton<Student>(
+                child: AAMDropdown<Student>(
                   value: _alumnoSel,
-                  underline: const SizedBox.shrink(),
+                  options: _alumnos,
+                  itemLabel: (a) => a.nombreCompleto,
                   isExpanded: true,
-                  hint: Text(
-                    _alumnosLoading
-                        ? 'Cargando...'
-                        : (_alumnos.isEmpty ? 'Sin alumnos en este curso' : 'Seleccionar alumno'),
-                    style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
-                  ),
-                  style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
-                  items: _alumnos.map((a) => DropdownMenuItem(value: a, child: Text(a.nombreCompleto))).toList(),
+                  hint: _alumnosLoading
+                      ? 'Cargando...'
+                      : (_alumnos.isEmpty ? 'Sin alumnos en este curso' : 'Seleccionar alumno'),
                   onChanged: (_alumnosLoading || _alumnos.isEmpty) ? null : (v) => setState(() => _alumnoSel = v),
                 ),
               ),
@@ -613,12 +622,11 @@ class _IngresoManualModalState extends State<_IngresoManualModal> {
               _dropdownContainer(
                 theme,
                 enabled: true,
-                child: DropdownButton<AttendanceStatus>(
+                child: AAMDropdown<AttendanceStatus>(
                   value: _estado,
-                  underline: const SizedBox.shrink(),
+                  options: _estadosDisponibles,
+                  itemLabel: (e) => e.label,
                   isExpanded: true,
-                  style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
-                  items: _estadosDisponibles.map((e) => DropdownMenuItem(value: e, child: Text(e.label))).toList(),
                   onChanged: (v) => setState(() => _estado = v ?? _estado),
                 ),
               ),
@@ -841,14 +849,12 @@ class _RetiroAnticipadoModalState extends State<_RetiroAnticipadoModal> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(10)),
-            child: DropdownButton<User>(
+            child: AAMDropdown<User>(
               value: _usuarioSel,
-              underline: const SizedBox.shrink(),
+              options: _usuarios,
+              itemLabel: (u) => u.fullName,
               isExpanded: true,
-              hint: Text(_usuariosLoading ? 'Cargando...' : 'Seleccionar preceptor/dirección',
-                style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
-              style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
-              items: _usuarios.map((u) => DropdownMenuItem(value: u, child: Text(u.fullName))).toList(),
+              hint: _usuariosLoading ? 'Cargando...' : 'Seleccionar preceptor/dirección',
               onChanged: _usuariosLoading ? null : (v) => setState(() => _usuarioSel = v),
             ),
           ),

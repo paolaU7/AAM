@@ -8,16 +8,17 @@ class ClassPeriodRepository(ABC):
 
     @abstractmethod
     def get_by_course(self, course_id: str) -> List[ClassPeriod]:
-        """Incluye tanto los períodos curriculares del curso (course_id-scoped)
-        como los períodos de contraturno de TODOS sus grupos de taller
-        (workshop_group_id-scoped) — el frontend los separa por pestaña."""
+        """Todos los períodos de este curso — curriculares (workshop_group_id
+        NULL) y de contraturno de TODOS sus grupos de taller (course_id
+        siempre apunta al curso, tengan o no grupo) — el frontend los separa
+        por pestaña usando workshop_group_id."""
         ...
 
     @abstractmethod
     def create(
         self,
         *,
-        course_id: Optional[str] = None,
+        course_id: str,
         workshop_group_id: Optional[str] = None,
         day_of_week: int,
         shift: str,
@@ -28,8 +29,10 @@ class ClassPeriodRepository(ABC):
         teacher_id: Optional[str] = None,
         is_fifth_module: bool = False,
     ) -> ClassPeriod:
-        """Exactamente uno de course_id / workshop_group_id. `period_order`
-        se calcula solo: siguiente número dentro de (scope, day_of_week, shift)."""
+        """`course_id` siempre requerido; `workshop_group_id` opcional acota
+        a un grupo de taller puntual. `period_order` se calcula solo:
+        siguiente número dentro de (course_id, day_of_week, shift) si es
+        curricular, o (workshop_group_id, day_of_week, shift) si es de taller."""
         ...
 
     @abstractmethod

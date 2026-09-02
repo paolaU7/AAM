@@ -33,7 +33,8 @@ class CourseRepositoryImpl(CourseRepository):
             academic_year=model.academic_year,
             grade_year=model.grade_year,
             division=model.division,
-            specialty=model.specialty,
+            specialty_id=str(model.specialty_id),
+            specialty_name=model.specialty.name if model.specialty else "",
             total_students=total_students,
             name=name,
         )
@@ -74,13 +75,42 @@ class CourseRepositoryImpl(CourseRepository):
         return self._to_entity(model, total)
 
     def create_course(
-        self, academic_year: int, grade_year: int, division: int, specialty: Optional[str] = None,
+        self, academic_year: int, grade_year: int, division: int, specialty_id: str,
     ) -> Course:
         model = CourseModel(
             academic_year=academic_year, grade_year=grade_year, division=division,
-            specialty=specialty,
+            specialty_id=specialty_id,
         )
         self.db.add(model)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            # Deja la sesión lista para usarse de nuevo en el resto del
+            # request (p.ej. para armar una respuesta de error) — sin esto
+            # cualquier query posterior en la misma sesión falla con
+            # "current transaction is aborted". El mensaje real (del CHECK
+            # UNIQUE o del trigger enforce_basic_cycle_specialty) lo
+            # traduce el usecase, que sí conoce el vocabulario de dominio.
+            self.db.rollback()
+            raise
         self.db.refresh(model)
         return self._to_entity(model, 0)
+
+    def update_course(
+        self, id: str, academic_year: int, grade_year: int, division: int, specialty_id: str,
+    ) -> Optional[Course]:
+        model = self.db.query(CourseModel).filter(CourseModel.id == id).first()
+        if model is None:
+            return None
+        model.academic_year = academic_year
+        model.grade_year = grade_year
+        model.division = division
+        model.specialty_id = specialty_id
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+        self.db.refresh(model)
+        total = self.db.query(StudentModel).filter(StudentModel.course_id == id).count()
+        return self._to_entity(model, total)

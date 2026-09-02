@@ -20,5 +20,12 @@ class CourseRepository(ABC):
 
     @abstractmethod
     def create_course(
-        self, academic_year: int, grade_year: int, division: int, specialty: Optional[str] = None,
+        self, academic_year: int, grade_year: int, division: int, specialty_id: str,
     ) -> Course: ...
+
+    @abstractmethod
+    def update_course(
+        self, id: str, academic_year: int, grade_year: int, division: int, specialty_id: str,
+    ) -> Optional[Course]:
+        """Returns None if the course doesn't exist."""
+        ...

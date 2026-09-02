@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.infrastructure.database import get_db
 from app.infrastructure.repositories.course_repository_impl import CourseRepositoryImpl
+from app.infrastructure.repositories.specialty_repository_impl import SpecialtyRepositoryImpl
 from app.infrastructure.repositories.time_slot_repository_impl import TimeSlotRepositoryImpl
 from app.infrastructure.repositories.academic_repository_impl import CourseSubjectTeacherRepositoryImpl
 from app.infrastructure.repositories.class_period_repository_impl import ClassPeriodRepositoryImpl
@@ -11,7 +12,7 @@ from app.infrastructure.repositories.workshop_group_repository_impl import Works
 from app.infrastructure.repositories.preceptor_assignment_repository_impl import (
     CoursePreceptorRepositoryImpl, CoursePreceptorTempAssignmentRepositoryImpl,
 )
-from app.domain.usecases.course_usecases import GetCourses, GetCourseById, CreateCourse, CourseError
+from app.domain.usecases.course_usecases import GetCourses, GetCourseById, CreateCourse, UpdateCourse, CourseError
 from app.domain.usecases.time_slot_usecases import (
     GetTimeSlotsByCourse, CreateCourseTimeSlot, DeleteTimeSlot, TimeSlotError,
 )
@@ -34,7 +35,8 @@ class CourseResponse(BaseModel):
     academic_year: int
     grade_year: int
     division: int
-    specialty: Optional[str] = None
+    specialty_id: str
+    specialty_name: str
     total_students: int
     name: str
 
@@ -46,7 +48,14 @@ class CourseCreate(BaseModel):
     academic_year: int
     grade_year: int
     division: int
-    specialty: Optional[str] = None
+    specialty_id: str
+
+
+class CourseUpdate(BaseModel):
+    academic_year: int
+    grade_year: int
+    division: int
+    specialty_id: str
 
 
 class TimeSlotResponse(BaseModel):
@@ -87,7 +96,7 @@ class SubjectTeacherAssign(BaseModel):
 
 class ClassPeriodResponse(BaseModel):
     id: str
-    course_id: Optional[str] = None
+    course_id: str
     workshop_group_id: Optional[str] = None
     day_of_week: int
     shift: str
@@ -154,7 +163,8 @@ router = APIRouter(prefix="/courses", tags=["courses"])
 def _to_response(c) -> CourseResponse:
     return CourseResponse(
         id=str(c.id), academic_year=c.academic_year, grade_year=c.grade_year, division=c.division,
-        specialty=c.specialty, total_students=c.total_students, name=c.name,
+        specialty_id=c.specialty_id, specialty_name=c.specialty_name,
+        total_students=c.total_students, name=c.name,
     )
 
 
@@ -167,10 +177,11 @@ def get_courses(db: Session = Depends(get_db)):
 @router.post("", response_model=CourseResponse, status_code=201)
 def create_course(body: CourseCreate, db: Session = Depends(get_db)):
     repo = CourseRepositoryImpl(db)
+    specialty_repo = SpecialtyRepositoryImpl(db)
     try:
-        curso = CreateCourse(repo).execute(
+        curso = CreateCourse(repo, specialty_repo).execute(
             academic_year=body.academic_year, grade_year=body.grade_year,
-            division=body.division, specialty=body.specialty,
+            division=body.division, specialty_id=body.specialty_id,
         )
     except CourseError as e:
         raise HTTPException(status_code=e.status_code, detail=str(e))
@@ -183,6 +194,20 @@ def get_course(id: str, db: Session = Depends(get_db)):
     curso = GetCourseById(repo).execute(id)
     if not curso:
         raise HTTPException(status_code=404, detail="Course not found")
+    return _to_response(curso)
+
+
+@router.patch("/{id}", response_model=CourseResponse)
+def update_course(id: str, body: CourseUpdate, db: Session = Depends(get_db)):
+    repo = CourseRepositoryImpl(db)
+    specialty_repo = SpecialtyRepositoryImpl(db)
+    try:
+        curso = UpdateCourse(repo, specialty_repo).execute(
+            id=id, academic_year=body.academic_year, grade_year=body.grade_year,
+            division=body.division, specialty_id=body.specialty_id,
+        )
+    except CourseError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
     return _to_response(curso)
 
 

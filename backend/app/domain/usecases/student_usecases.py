@@ -37,6 +37,14 @@ class ActualizarAlumno:
         return self.repo.actualizar_alumno(id, alumno)
 
 
+class ToggleAlumnoActive:
+    def __init__(self, repo: AlumnoRepository):
+        self.repo = repo
+
+    def execute(self, id: str) -> Optional[Alumno]:
+        return self.repo.toggle_active(id)
+
+
 class CrearAlumnoManual:
     """Manual student registration: the course is already resolved by the
     frontend (from the 3-step cascade against `/courses`) and sent as

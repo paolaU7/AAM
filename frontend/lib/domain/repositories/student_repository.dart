@@ -35,4 +35,7 @@ abstract class StudentRepository {
   });
 
   Future<Student> actualizarAlumno(Student alumno);
+
+  /// Baja/alta lógica — no borra al alumno del sistema.
+  Future<Student> toggleActive(String id);
 }
