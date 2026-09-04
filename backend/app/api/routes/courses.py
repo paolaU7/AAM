@@ -6,7 +6,9 @@ from app.infrastructure.database import get_db
 from app.infrastructure.repositories.course_repository_impl import CourseRepositoryImpl
 from app.infrastructure.repositories.specialty_repository_impl import SpecialtyRepositoryImpl
 from app.infrastructure.repositories.time_slot_repository_impl import TimeSlotRepositoryImpl
-from app.infrastructure.repositories.academic_repository_impl import CourseSubjectTeacherRepositoryImpl
+from app.infrastructure.repositories.academic_repository_impl import (
+    CourseSubjectTeacherRepositoryImpl, SubjectRepositoryImpl,
+)
 from app.infrastructure.repositories.class_period_repository_impl import ClassPeriodRepositoryImpl
 from app.infrastructure.repositories.workshop_group_repository_impl import WorkshopGroupRepositoryImpl
 from app.infrastructure.repositories.preceptor_assignment_repository_impl import (
@@ -83,10 +85,12 @@ class SubjectTeacherResponse(BaseModel):
     course_id: str
     subject_id: str
     subject_name: str
+    subject_type: str
     teacher_id: str
     teacher_name: str
     teacher_email: Optional[str] = None
     teacher_phone: Optional[str] = None
+    course_name: Optional[str] = None
 
 
 class SubjectTeacherAssign(BaseModel):
@@ -312,8 +316,10 @@ def get_course_subject_teachers(id: str, db: Session = Depends(get_db)):
 @router.post("/{id}/subject-teachers", response_model=SubjectTeacherResponse, status_code=201)
 def assign_course_subject_teacher(id: str, body: SubjectTeacherAssign, db: Session = Depends(get_db)):
     repo = CourseSubjectTeacherRepositoryImpl(db)
+    course_repo = CourseRepositoryImpl(db)
+    subject_repo = SubjectRepositoryImpl(db)
     try:
-        row = AssignCourseSubjectTeacher(repo).execute(id, body.subject_id, body.teacher_id)
+        row = AssignCourseSubjectTeacher(repo, course_repo, subject_repo).execute(id, body.subject_id, body.teacher_id)
     except AcademicError as e:
         raise HTTPException(status_code=e.status_code, detail=str(e))
     return SubjectTeacherResponse(**row.__dict__)

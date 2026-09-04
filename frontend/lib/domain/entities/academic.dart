@@ -1,11 +1,62 @@
+/// 'curricular' | 'workshop' — fijo desde el alta de la materia. Si la misma
+/// materia se dicta en ambos contextos, son dos filas distintas en el
+/// catálogo, no una compartida.
+enum SubjectType { curricular, workshop }
+
+SubjectType subjectTypeFromString(String raw) => switch (raw) {
+      'curricular' => SubjectType.curricular,
+      'workshop' => SubjectType.workshop,
+      _ => throw FormatException('subject_type desconocido: $raw'),
+    };
+
+String subjectTypeToJson(SubjectType t) => switch (t) {
+      SubjectType.curricular => 'curricular',
+      SubjectType.workshop => 'workshop',
+    };
+
+String subjectTypeLabel(SubjectType t) => switch (t) {
+      SubjectType.curricular => 'Curricular',
+      SubjectType.workshop => 'Taller',
+    };
+
 /// Catálogo global de materias, reutilizable entre cursos y años.
 class Subject {
-  const Subject({required this.id, required this.name});
+  const Subject({required this.id, required this.name, required this.subjectType});
   final String id;
   final String name;
+  final SubjectType subjectType;
 
-  factory Subject.fromJson(Map<String, dynamic> json) =>
-      Subject(id: json['id'].toString(), name: json['name']);
+  factory Subject.fromJson(Map<String, dynamic> json) => Subject(
+        id: json['id'].toString(),
+        name: json['name'],
+        subjectType: subjectTypeFromString(json['subject_type']),
+      );
+}
+
+/// En qué año de cursada (+especialidad, si es 4to o más) se puede dictar
+/// una materia. Una materia puede tener varias de estas a la vez.
+class SubjectApplicability {
+  const SubjectApplicability({
+    required this.id,
+    required this.subjectId,
+    required this.gradeYear,
+    required this.specialtyId,
+    required this.specialtyName,
+  });
+
+  final String id;
+  final String subjectId;
+  final int gradeYear;
+  final String specialtyId;
+  final String specialtyName;
+
+  factory SubjectApplicability.fromJson(Map<String, dynamic> json) => SubjectApplicability(
+        id: json['id'].toString(),
+        subjectId: json['subject_id'].toString(),
+        gradeYear: (json['grade_year'] as num).toInt(),
+        specialtyId: json['specialty_id'].toString(),
+        specialtyName: json['specialty_name'],
+      );
 }
 
 /// Profesor — dato de referencia para el horario. No tiene login.
@@ -30,27 +81,33 @@ class SubjectTeacherAssignment {
     required this.courseId,
     required this.subjectId,
     required this.subjectName,
+    required this.subjectType,
     required this.teacherId,
     required this.teacherName,
     this.teacherEmail,
     this.teacherPhone,
+    this.courseName,
   });
 
   final String courseId;
   final String subjectId;
   final String subjectName;
+  final SubjectType subjectType;
   final String teacherId;
   final String teacherName;
   final String? teacherEmail;
   final String? teacherPhone;
+  final String? courseName;
 
   factory SubjectTeacherAssignment.fromJson(Map<String, dynamic> json) => SubjectTeacherAssignment(
         courseId: json['course_id'].toString(),
         subjectId: json['subject_id'].toString(),
         subjectName: json['subject_name'],
+        subjectType: subjectTypeFromString(json['subject_type']),
         teacherId: json['teacher_id'].toString(),
         teacherName: json['teacher_name'],
         teacherEmail: json['teacher_email'],
         teacherPhone: json['teacher_phone'],
+        courseName: json['course_name'],
       );
 }

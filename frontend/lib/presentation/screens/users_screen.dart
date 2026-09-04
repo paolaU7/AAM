@@ -88,7 +88,7 @@ class _UsuariosScreenState extends State<UsuariosScreen> with AutoRefreshMixin<U
   }
 
   Future<void> _eliminarUsuario(User usuario) async {
-    final ok = await _confirmarEliminacion(
+    final ok = await showAamConfirmDialog(
       context,
       titulo: 'Eliminar usuario',
       mensaje: '¿Eliminar a ${usuario.fullName}? Esta acción no se puede deshacer. '
@@ -833,65 +833,6 @@ class _FieldInput extends StatelessWidget {
           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         ),
       ),
-    );
-  }
-}
-
-// ─── Confirmación de borrado ──────────────────────────────────────────────────
-Future<bool> _confirmarEliminacion(BuildContext context, {required String titulo, required String mensaje}) async {
-  final result = await showDialog<bool>(
-    context: context,
-    barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
-    builder: (_) => _ConfirmDialog(titulo: titulo, mensaje: mensaje),
-  );
-  return result == true;
-}
-
-class _ConfirmDialog extends StatelessWidget {
-  const _ConfirmDialog({required this.titulo, required this.mensaje});
-  final String titulo;
-  final String mensaje;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: AAMTheme(),
-      builder: (context, _) {
-        final theme = AAMTheme();
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            width: 400,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(color: theme.card, borderRadius: BorderRadius.circular(16)),
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(titulo, style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w700, color: theme.text)),
-              const SizedBox(height: 10),
-              Text(mensaje, style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
-              const SizedBox(height: 20),
-              Row(children: [
-                Expanded(child: GestureDetector(
-                  onTap: () => Navigator.of(context).pop(false),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(10)),
-                    child: Center(child: Text('Cancelar', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec))),
-                  ),
-                )),
-                const SizedBox(width: 12),
-                Expanded(child: GestureDetector(
-                  onTap: () => Navigator.of(context).pop(true),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(color: AAMColors.danger, borderRadius: BorderRadius.circular(10)),
-                    child: Center(child: Text('Eliminar', style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.white))),
-                  ),
-                )),
-              ]),
-            ]),
-          ),
-        );
-      },
     );
   }
 }

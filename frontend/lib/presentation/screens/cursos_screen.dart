@@ -494,7 +494,7 @@ class _CursoFormState extends State<_CursoForm> {
     }
     final maxGradeYear = _settings?.maxGradeYear ?? 7;
     final maxDivision = _settings?.maxDivision ?? 4;
-    return _FormDialog(
+    return AAMFormDialog(
       theme: theme,
       icon: Icons.school_outlined,
       titulo: _esEdicion ? 'Editar curso' : 'Nuevo curso',
@@ -761,7 +761,7 @@ class _TabHorarioState extends State<_TabHorario> {
   }
 
   Future<void> _eliminarFranja(TimeSlot slot) async {
-    final ok = await _confirmarEliminacion(context,
+    final ok = await showAamConfirmDialog(context,
         titulo: 'Eliminar horario',
         mensaje: '¿Eliminar el horario del ${_diaLabel(slot.dayOfWeek)} ${slot.startTime.label}–${slot.endTime.label}?');
     if (!ok) return;
@@ -793,7 +793,7 @@ class _TabHorarioState extends State<_TabHorario> {
   }
 
   Future<void> _eliminarPeriodo(ClassPeriod p) async {
-    final ok = await _confirmarEliminacion(context,
+    final ok = await showAamConfirmDialog(context,
         titulo: 'Eliminar hora de clase',
         mensaje: '¿Eliminar la hora de clase del ${_diaLabel(p.dayOfWeek)} ${p.startTime.label}–${p.endTime.label}?');
     if (!ok) return;
@@ -1200,7 +1200,7 @@ class _NuevaFranjaFormState extends State<_NuevaFranjaForm> {
   @override
   Widget build(BuildContext context) {
     final theme = AAMTheme();
-    return _FormDialog(
+    return AAMFormDialog(
       theme: theme,
       icon: Icons.schedule_outlined,
       titulo: 'Nuevo horario',
@@ -1277,6 +1277,27 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
   bool _submitting = false;
   String? _error;
 
+  // El trigger de la DB rechaza una materia curricular en un período de
+  // taller y viceversa — filtramos acá para no ofrecer algo que se vaya a
+  // rechazar al guardar. Curricular = alcance "todo el curso"; taller =
+  // alcance de un grupo puntual.
+  SubjectType get _tipoEsperado => _grupoSel == null ? SubjectType.curricular : SubjectType.workshop;
+
+  List<SubjectTeacherAssignment> get _materiasFiltradas =>
+      widget.materias.where((m) => m.subjectType == _tipoEsperado).toList();
+
+  void _onGrupoChanged(WorkshopGroup? g) {
+    setState(() {
+      _grupoSel = g;
+      // si la materia elegida ya no matchea el tipo del nuevo alcance, se
+      // limpia junto con el profesor derivado.
+      if (_materiaSel != null && _materiaSel!.subjectType != _tipoEsperado) {
+        _materiaSel = null;
+        _profesorSel = null;
+      }
+    });
+  }
+
   Future<void> _pickStart() async {
     final t = await _pickTime(context, _start);
     if (t != null) setState(() => _start = t);
@@ -1347,7 +1368,7 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
   @override
   Widget build(BuildContext context) {
     final theme = AAMTheme();
-    return _FormDialog(
+    return AAMFormDialog(
       theme: theme,
       icon: Icons.event_note_outlined,
       titulo: 'Nueva hora de clase',
@@ -1363,7 +1384,7 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
             value: _grupoSel,
             options: <WorkshopGroup?>[null, ...widget.grupos],
             itemLabel: (g) => g == null ? 'Curricular (todo el curso)' : 'Grupo ${g.name} (contraturno)',
-            onChanged: (v) => setState(() => _grupoSel = v),
+            onChanged: _onGrupoChanged,
           ),
           const SizedBox(height: 16),
         ],
@@ -1400,14 +1421,29 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
         ]),
         if (_periodType == PeriodType.lesson) ...[
           const SizedBox(height: 16),
-          AAMLabeledDropdown<SubjectTeacherAssignment>(
-            label: 'Materia',
-            value: _materiaSel,
-            options: widget.materias,
-            hint: 'Materia',
-            itemLabel: (m) => '${m.subjectName} (${m.teacherName})',
-            onChanged: _onMateriaChanged,
-          ),
+          if (_materiasFiltradas.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(color: AAMColors.warning.withAlpha((0.1 * 255).round()), borderRadius: BorderRadius.circular(8)),
+              child: Row(children: [
+                const Icon(Icons.info_outline, size: 16, color: AAMColors.warning),
+                const SizedBox(width: 8),
+                Expanded(child: Text(
+                  'Este curso no tiene materias de tipo "${subjectTypeLabel(_tipoEsperado)}" asignadas. '
+                  'Asignalas en la pestaña "Materias y profesores".',
+                  style: GoogleFonts.dmSans(fontSize: 12, color: theme.text),
+                )),
+              ]),
+            )
+          else
+            AAMLabeledDropdown<SubjectTeacherAssignment>(
+              label: 'Materia',
+              value: _materiaSel,
+              options: _materiasFiltradas,
+              hint: 'Materia',
+              itemLabel: (m) => '${m.subjectName} (${m.teacherName})',
+              onChanged: _onMateriaChanged,
+            ),
           const SizedBox(height: 16),
           AAMLabeledDropdown<Teacher>(
             label: 'Profesor a cargo (cambiá acá si es un reemplazo puntual)',
@@ -1469,13 +1505,13 @@ class _TabMateriasState extends State<_TabMaterias> {
     final result = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
-      builder: (_) => _AsignarMateriaForm(ds: widget.ds, courseId: widget.curso.id),
+      builder: (_) => _AsignarMateriaForm(ds: widget.ds, curso: widget.curso),
     );
     if (result == true) _cargar();
   }
 
   Future<void> _quitar(SubjectTeacherAssignment a) async {
-    final ok = await _confirmarEliminacion(context,
+    final ok = await showAamConfirmDialog(context,
         titulo: 'Quitar materia',
         mensaje: '¿Quitar "${a.subjectName}" del curso? El horario detallado que use esta materia dejará de tener profesor asignado.');
     if (!ok) return;
@@ -1528,7 +1564,14 @@ class _MateriaRow extends StatelessWidget {
         _InitialsAvatar(text: asignacion.subjectName, color: avatarColorFor(asignacion.subjectName), size: 36),
         const SizedBox(width: 14),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(asignacion.subjectName, style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: theme.text)),
+          Row(children: [
+            Text(asignacion.subjectName, style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: theme.text)),
+            const SizedBox(width: 8),
+            AAMBadge(
+              label: subjectTypeLabel(asignacion.subjectType),
+              color: asignacion.subjectType == SubjectType.workshop ? AAMColors.teal : AAMColors.primary,
+            ),
+          ]),
           Text('Prof. ${asignacion.teacherName}', style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec)),
         ])),
         Text(contacto, style: GoogleFonts.dmSans(fontSize: 11, color: theme.textSec), textAlign: TextAlign.right),
@@ -1540,9 +1583,9 @@ class _MateriaRow extends StatelessWidget {
 }
 
 class _AsignarMateriaForm extends StatefulWidget {
-  const _AsignarMateriaForm({required this.ds, required this.courseId});
+  const _AsignarMateriaForm({required this.ds, required this.curso});
   final ApiDatasource ds;
-  final String courseId;
+  final Course curso;
 
   @override
   State<_AsignarMateriaForm> createState() => _AsignarMateriaFormState();
@@ -1567,7 +1610,13 @@ class _AsignarMateriaFormState extends State<_AsignarMateriaForm> {
   Future<void> _cargarCatalogos() async {
     setState(() => _loading = true);
     try {
-      final results = await Future.wait([widget.ds.getSubjects(), widget.ds.getTeachers()]);
+      // Solo materias habilitadas (subject_applicability) para el
+      // año+especialidad de ESTE curso puntual — mismo filtro que valida el
+      // backend, para no ofrecer algo que el trigger va a rechazar después.
+      final results = await Future.wait([
+        widget.ds.getSubjects(gradeYear: widget.curso.gradeYear, specialtyId: widget.curso.specialtyId),
+        widget.ds.getTeachers(),
+      ]);
       if (!mounted) return;
       setState(() {
         _materias = results[0] as List<Subject>;
@@ -1577,21 +1626,6 @@ class _AsignarMateriaFormState extends State<_AsignarMateriaForm> {
       if (mounted) setState(() => _error = 'No se pudieron cargar las materias/profesores.');
     } finally {
       if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _nuevaMateria() async {
-    final nombre = await _pedirTexto(context, titulo: 'Nueva materia', hint: 'Nombre de la materia');
-    if (nombre == null || nombre.trim().isEmpty) return;
-    try {
-      final materia = await widget.ds.crearSubject(nombre.trim());
-      if (!mounted) return;
-      setState(() {
-        _materias = [..._materias, materia];
-        _materiaSel = materia;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _error = 'No se pudo crear la materia.');
     }
   }
 
@@ -1633,7 +1667,7 @@ class _AsignarMateriaFormState extends State<_AsignarMateriaForm> {
     });
     try {
       await widget.ds.asignarCourseSubjectTeacher(
-        courseId: widget.courseId,
+        courseId: widget.curso.id,
         subjectId: _materiaSel!.id,
         teacherId: _profesorSel!.id,
       );
@@ -1651,7 +1685,7 @@ class _AsignarMateriaFormState extends State<_AsignarMateriaForm> {
     if (_loading) {
       return const Dialog(child: Padding(padding: EdgeInsets.all(40), child: AAMLoadingScreen()));
     }
-    return _FormDialog(
+    return AAMFormDialog(
       theme: theme,
       icon: Icons.menu_book_outlined,
       titulo: 'Asignar materia',
@@ -1661,14 +1695,27 @@ class _AsignarMateriaFormState extends State<_AsignarMateriaForm> {
       onSubmit: _submit,
       submitLabel: 'Asignar',
       children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Expanded(child: AAMLabeledDropdown<Subject>(
-            label: 'Materia', value: _materiaSel, options: _materias,
-            hint: 'Materia', itemLabel: (m) => m.name, onChanged: (v) => setState(() => _materiaSel = v),
-          )),
-          const SizedBox(width: 8),
-          IconButton(onPressed: _nuevaMateria, icon: const Icon(Icons.add_circle_outline, color: AAMColors.accent), tooltip: 'Nueva materia'),
-        ]),
+        if (_materias.isEmpty) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(color: AAMColors.warning.withAlpha((0.1 * 255).round()), borderRadius: BorderRadius.circular(8)),
+            child: Row(children: [
+              const Icon(Icons.info_outline, size: 16, color: AAMColors.warning),
+              const SizedBox(width: 8),
+              Expanded(child: Text(
+                'No hay materias habilitadas para ${gradeYearOrdinal(widget.curso.gradeYear)} '
+                '(${widget.curso.specialtyName}). Configurala desde la sección Materias.',
+                style: GoogleFonts.dmSans(fontSize: 12, color: theme.text),
+              )),
+            ]),
+          ),
+          const SizedBox(height: 16),
+        ],
+        AAMLabeledDropdown<Subject>(
+          label: 'Materia', value: _materiaSel, options: _materias,
+          hint: 'Materia', itemLabel: (m) => '${m.name} (${subjectTypeLabel(m.subjectType)})',
+          onChanged: (v) => setState(() => _materiaSel = v),
+        ),
         const SizedBox(height: 16),
         Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Expanded(child: AAMLabeledDropdown<Teacher>(
@@ -1707,7 +1754,7 @@ class _NuevoProfesorDialogState extends State<_NuevoProfesorDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = AAMTheme();
-    return _FormDialog(
+    return AAMFormDialog(
       theme: theme,
       icon: Icons.person_add_alt_outlined,
       titulo: 'Nuevo profesor',
@@ -1806,7 +1853,7 @@ class _TabPreceptoresState extends State<_TabPreceptores> {
   }
 
   Future<void> _quitarPermanente(ShiftType shift) async {
-    final ok = await _confirmarEliminacion(context,
+    final ok = await showAamConfirmDialog(context,
         titulo: 'Quitar preceptor',
         mensaje: '¿Quitar el preceptor a cargo del turno ${shiftTypeLabel(shift)}?');
     if (!ok) return;
@@ -1838,7 +1885,7 @@ class _TabPreceptoresState extends State<_TabPreceptores> {
   }
 
   Future<void> _eliminarTemporal(CoursePreceptorTempAssignment t) async {
-    final ok = await _confirmarEliminacion(context,
+    final ok = await showAamConfirmDialog(context,
         titulo: 'Eliminar reemplazo temporal',
         mensaje: '¿Eliminar el reemplazo de ${t.preceptorName} (${t.startDate.day}/${t.startDate.month}–${t.endDate.day}/${t.endDate.month})?');
     if (!ok) return;
@@ -2022,7 +2069,7 @@ class _AsignarPreceptorFormState extends State<_AsignarPreceptorForm> {
   @override
   Widget build(BuildContext context) {
     final theme = AAMTheme();
-    return _FormDialog(
+    return AAMFormDialog(
       theme: theme,
       icon: Icons.badge_outlined,
       titulo: 'Preceptor a cargo — ${shiftTypeLabel(widget.shift)}',
@@ -2155,7 +2202,7 @@ class _NuevoReemplazoFormState extends State<_NuevoReemplazoForm> {
   @override
   Widget build(BuildContext context) {
     final theme = AAMTheme();
-    return _FormDialog(
+    return AAMFormDialog(
       theme: theme,
       icon: Icons.event_available_outlined,
       titulo: 'Reemplazo temporal',
@@ -2214,53 +2261,6 @@ Future<DateTime?> _pickDate(BuildContext context, {DateTime? initial, DateTime? 
     initialDate: initial ?? DateTime.now(),
     firstDate: firstDate ?? DateTime(2000),
     lastDate: lastDate ?? DateTime(2100),
-  );
-}
-
-Future<bool> _confirmarEliminacion(BuildContext context, {required String titulo, required String mensaje}) async {
-  final result = await showDialog<bool>(
-    context: context,
-    barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
-    builder: (_) => _ConfirmDialog(titulo: titulo, mensaje: mensaje),
-  );
-  return result == true;
-}
-
-Future<String?> _pedirTexto(BuildContext context, {required String titulo, required String hint}) async {
-  final ctrl = TextEditingController();
-  final theme = AAMTheme();
-  return showDialog<String>(
-    context: context,
-    barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
-    builder: (_) => Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        width: 360,
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(color: theme.card, borderRadius: BorderRadius.circular(16)),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(titulo, style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w700, color: theme.text)),
-          const SizedBox(height: 14),
-          _textInput(ctrl, hint),
-          const SizedBox(height: 20),
-          Row(children: [
-            Expanded(child: GestureDetector(
-              onTap: () => Navigator.of(context).pop(),
-              child: Container(padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(10)),
-                  child: Center(child: Text('Cancelar', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)))),
-            )),
-            const SizedBox(width: 12),
-            Expanded(child: GestureDetector(
-              onTap: () => Navigator.of(context).pop(ctrl.text),
-              child: Container(padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(color: AAMColors.accent, borderRadius: BorderRadius.circular(10)),
-                  child: Center(child: Text('Crear', style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.white)))),
-            )),
-          ]),
-        ]),
-      ),
-    ),
   );
 }
 
@@ -2539,134 +2539,3 @@ class _EmptyRow extends StatelessWidget {
   }
 }
 
-class _ConfirmDialog extends StatelessWidget {
-  const _ConfirmDialog({required this.titulo, required this.mensaje});
-  final String titulo;
-  final String mensaje;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = AAMTheme();
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        width: 400,
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(color: theme.card, borderRadius: BorderRadius.circular(16)),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(titulo, style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w700, color: theme.text)),
-          const SizedBox(height: 10),
-          Text(mensaje, style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
-          const SizedBox(height: 20),
-          Row(children: [
-            Expanded(child: GestureDetector(
-              onTap: () => Navigator.of(context).pop(false),
-              child: Container(padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(10)),
-                  child: Center(child: Text('Cancelar', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)))),
-            )),
-            const SizedBox(width: 12),
-            Expanded(child: GestureDetector(
-              onTap: () => Navigator.of(context).pop(true),
-              child: Container(padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(color: AAMColors.danger, borderRadius: BorderRadius.circular(10)),
-                  child: Center(child: Text('Eliminar', style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.white)))),
-            )),
-          ]),
-        ]),
-      ),
-    );
-  }
-}
-
-/// Layout genérico de un diálogo de formulario (título + campos + acciones),
-/// usado por todos los formularios de esta pantalla para no repetir el
-/// mismo Container/Dialog/Row de botones una y otra vez.
-class _FormDialog extends StatelessWidget {
-  const _FormDialog({
-    required this.theme,
-    required this.icon,
-    required this.titulo,
-    required this.children,
-    required this.onCancel,
-    required this.onSubmit,
-    required this.submitLabel,
-    this.error,
-    this.submitting = false,
-  });
-
-  final AAMTheme theme;
-  final IconData icon;
-  final String titulo;
-  final List<Widget> children;
-  final VoidCallback onCancel;
-  final VoidCallback onSubmit;
-  final String submitLabel;
-  final String? error;
-  final bool submitting;
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        width: 480,
-        padding: const EdgeInsets.all(28),
-        decoration: BoxDecoration(
-          color: theme.card,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: Colors.black.withAlpha((0.12 * 255).round()), blurRadius: 32, offset: const Offset(0, 8))],
-        ),
-        child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Container(
-                width: 36, height: 36,
-                decoration: BoxDecoration(color: AAMColors.primary, borderRadius: BorderRadius.circular(10)),
-                child: Icon(icon, size: 18, color: AAMColors.white),
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: Text(titulo, style: GoogleFonts.dmSans(fontSize: 17, fontWeight: FontWeight.w700, color: theme.text))),
-              GestureDetector(
-                onTap: onCancel,
-                child: Container(
-                  width: 30, height: 30,
-                  decoration: BoxDecoration(color: theme.surfaceCol, borderRadius: BorderRadius.circular(8)),
-                  child: Icon(Icons.close, size: 16, color: theme.textSec),
-                ),
-              ),
-            ]),
-            const SizedBox(height: 24),
-            ...children,
-            if (error != null) ...[
-              const SizedBox(height: 14),
-              Text(error!, style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.danger)),
-            ],
-            const SizedBox(height: 24),
-            Row(children: [
-              Expanded(child: GestureDetector(
-                onTap: onCancel,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(10)),
-                  child: Center(child: Text('Cancelar', style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec))),
-                ),
-              )),
-              const SizedBox(width: 14),
-              Expanded(child: GestureDetector(
-                onTap: submitting ? null : onSubmit,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(color: submitting ? AAMColors.accent.withAlpha((0.6 * 255).round()) : AAMColors.accent, borderRadius: BorderRadius.circular(10)),
-                  child: Center(child: submitting
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: AAMColors.white, strokeWidth: 2))
-                      : Text(submitLabel, style: GoogleFonts.dmSans(fontSize: 14, color: AAMColors.white))),
-                ),
-              )),
-            ]),
-          ]),
-        ),
-      ),
-    );
-  }
-}

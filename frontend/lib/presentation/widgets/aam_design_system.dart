@@ -552,3 +552,146 @@ Future<DateTime?> aamShowDatePicker(
     builder: (context, child) => Theme(data: _pickerTheme(theme), child: child!),
   );
 }
+
+// ─── Diálogos compartidos ──────────────────────────────────────────────────────
+/// Layout genérico de un diálogo de formulario (título + campos + acciones).
+/// Usalo en vez de armar tu propio Dialog/Container para cada formulario modal.
+class AAMFormDialog extends StatelessWidget {
+  const AAMFormDialog({
+    super.key,
+    required this.theme,
+    required this.icon,
+    required this.titulo,
+    required this.children,
+    required this.onCancel,
+    required this.onSubmit,
+    required this.submitLabel,
+    this.error,
+    this.submitting = false,
+  });
+
+  final AAMTheme theme;
+  final IconData icon;
+  final String titulo;
+  final List<Widget> children;
+  final VoidCallback onCancel;
+  final VoidCallback onSubmit;
+  final String submitLabel;
+  final String? error;
+  final bool submitting;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: 480,
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          color: theme.card,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [BoxShadow(color: Colors.black.withAlpha((0.12 * 255).round()), blurRadius: 32, offset: const Offset(0, 8))],
+        ),
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(color: AAMColors.primary, borderRadius: BorderRadius.circular(10)),
+                child: Icon(icon, size: 18, color: AAMColors.white),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Text(titulo, style: GoogleFonts.dmSans(fontSize: 17, fontWeight: FontWeight.w700, color: theme.text))),
+              GestureDetector(
+                onTap: onCancel,
+                child: Container(
+                  width: 30, height: 30,
+                  decoration: BoxDecoration(color: theme.surfaceCol, borderRadius: BorderRadius.circular(8)),
+                  child: Icon(Icons.close, size: 16, color: theme.textSec),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 24),
+            ...children,
+            if (error != null) ...[
+              const SizedBox(height: 14),
+              Text(error!, style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.danger)),
+            ],
+            const SizedBox(height: 24),
+            Row(children: [
+              Expanded(child: GestureDetector(
+                onTap: onCancel,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(10)),
+                  child: Center(child: Text('Cancelar', style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec))),
+                ),
+              )),
+              const SizedBox(width: 14),
+              Expanded(child: GestureDetector(
+                onTap: submitting ? null : onSubmit,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(color: submitting ? AAMColors.accent.withAlpha((0.6 * 255).round()) : AAMColors.accent, borderRadius: BorderRadius.circular(10)),
+                  child: Center(child: submitting
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: AAMColors.white, strokeWidth: 2))
+                      : Text(submitLabel, style: GoogleFonts.dmSans(fontSize: 14, color: AAMColors.white))),
+                ),
+              )),
+            ]),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// Diálogo de confirmación genérico (título + mensaje + Cancelar/Eliminar).
+class AAMConfirmDialog extends StatelessWidget {
+  const AAMConfirmDialog({super.key, required this.titulo, required this.mensaje});
+  final String titulo;
+  final String mensaje;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AAMTheme();
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: 400,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(color: theme.card, borderRadius: BorderRadius.circular(16)),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(titulo, style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w700, color: theme.text)),
+          const SizedBox(height: 10),
+          Text(mensaje, style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
+          const SizedBox(height: 20),
+          Row(children: [
+            Expanded(child: GestureDetector(
+              onTap: () => Navigator.of(context).pop(false),
+              child: Container(padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(10)),
+                  child: Center(child: Text('Cancelar', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)))),
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: GestureDetector(
+              onTap: () => Navigator.of(context).pop(true),
+              child: Container(padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(color: AAMColors.danger, borderRadius: BorderRadius.circular(10)),
+                  child: Center(child: Text('Eliminar', style: GoogleFonts.dmSans(fontSize: 13, color: AAMColors.white)))),
+            )),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
+Future<bool> showAamConfirmDialog(BuildContext context, {required String titulo, required String mensaje}) async {
+  final result = await showDialog<bool>(
+    context: context,
+    barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
+    builder: (_) => AAMConfirmDialog(titulo: titulo, mensaje: mensaje),
+  );
+  return result == true;
+}

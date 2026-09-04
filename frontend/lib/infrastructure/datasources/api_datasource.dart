@@ -322,23 +322,71 @@ class ApiDatasource {
 
   // ── Materias y profesores (catálogos globales) ──────────────────────────────
 
-  Future<List<Subject>> getSubjects() async {
-    final response = await http.get(Uri.parse('$baseUrl/subjects')).timeout(const Duration(seconds: 10));
+  /// Sin filtros: catálogo completo (pantalla Materias). Con
+  /// gradeYear+specialtyId: solo lo habilitado para esa combinación puntual
+  /// (desplegable al armar el horario de un curso).
+  Future<List<Subject>> getSubjects({int? gradeYear, String? specialtyId}) async {
+    final query = <String, String>{
+      if (gradeYear != null) 'grade_year': '$gradeYear',
+      if (specialtyId != null) 'specialty_id': specialtyId,
+    };
+    final uri = Uri.parse('$baseUrl/subjects').replace(queryParameters: query.isEmpty ? null : query);
+    final response = await http.get(uri).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) throw Exception('Error al obtener materias');
     final List<dynamic> data = jsonDecode(response.body);
     return data.map((j) => Subject.fromJson(j)).toList();
   }
 
-  Future<Subject> crearSubject(String name) async {
+  Future<Subject> crearSubject({required String name, required SubjectType subjectType}) async {
     final response = await http
         .post(
           Uri.parse('$baseUrl/subjects'),
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'name': name}),
+          body: jsonEncode({'name': name, 'subject_type': subjectTypeToJson(subjectType)}),
         )
         .timeout(const Duration(seconds: 10));
     if (response.statusCode == 201) return Subject.fromJson(jsonDecode(response.body));
-    throw ApiException('No se pudo crear la materia.');
+    String detail = '';
+    try {
+      detail = (jsonDecode(response.body)['detail'] ?? '').toString();
+    } catch (_) {}
+    throw ApiException(detail.isNotEmpty ? detail : 'No se pudo crear la materia.');
+  }
+
+  Future<List<SubjectApplicability>> getSubjectApplicability(String subjectId) async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/subjects/$subjectId/applicability'))
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) throw Exception('Error al obtener la aplicabilidad de la materia');
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((j) => SubjectApplicability.fromJson(j)).toList();
+  }
+
+  Future<SubjectApplicability> agregarSubjectApplicability({
+    required String subjectId,
+    required int gradeYear,
+    required String specialtyId,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/subjects/$subjectId/applicability'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'grade_year': gradeYear, 'specialty_id': specialtyId}),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 201) return SubjectApplicability.fromJson(jsonDecode(response.body));
+    String detail = '';
+    try {
+      detail = (jsonDecode(response.body)['detail'] ?? '').toString();
+    } catch (_) {}
+    throw ApiException(detail.isNotEmpty ? detail : 'No se pudo agregar la aplicabilidad.');
+  }
+
+  Future<void> quitarSubjectApplicability(String subjectId, String applicabilityId) async {
+    final response = await http
+        .delete(Uri.parse('$baseUrl/subjects/$subjectId/applicability/$applicabilityId'))
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode != 204) throw Exception('No se pudo quitar la aplicabilidad.');
   }
 
   Future<List<Teacher>> getTeachers() async {
@@ -365,6 +413,18 @@ class ApiDatasource {
     throw ApiException('No se pudo crear el profesor.');
   }
 
+  /// Todas las asignaciones (curso + materia) de UN profesor — ficha de
+  /// Profes. No distingue grupo de taller ni reemplazos (eso vive en
+  /// class_periods).
+  Future<List<SubjectTeacherAssignment>> getTeacherAssignments(String teacherId) async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/teachers/$teacherId/assignments'))
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) throw Exception('Error al obtener las asignaciones del profesor');
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((j) => SubjectTeacherAssignment.fromJson(j)).toList();
+  }
+
   // ── Materias y profesores DE UN curso ────────────────────────────────────────
 
   Future<List<SubjectTeacherAssignment>> getCourseSubjectTeachers(String courseId) async {
@@ -389,7 +449,11 @@ class ApiDatasource {
         )
         .timeout(const Duration(seconds: 10));
     if (response.statusCode == 201) return SubjectTeacherAssignment.fromJson(jsonDecode(response.body));
-    throw ApiException('No se pudo asignar la materia.');
+    String detail = '';
+    try {
+      detail = (jsonDecode(response.body)['detail'] ?? '').toString();
+    } catch (_) {}
+    throw ApiException(detail.isNotEmpty ? detail : 'No se pudo asignar la materia.');
   }
 
   Future<void> quitarCourseSubjectTeacher(String courseId, String subjectId) async {

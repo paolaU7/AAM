@@ -18,7 +18,8 @@ from app.infrastructure.models.schedule_model import (
     ShiftTypeEnum, ActivityTypeEnum,
 )
 from app.infrastructure.models.academic_model import (
-    SubjectModel, TeacherModel, CourseSubjectTeacherModel, ClassPeriodModel,
+    SubjectModel, SubjectApplicabilityModel, SubjectTypeEnum,
+    TeacherModel, CourseSubjectTeacherModel, ClassPeriodModel,
     PeriodTypeEnum,
 )
 from app.infrastructure.models.preceptor_model import (
@@ -36,7 +37,8 @@ __all__ = [
     "UserModel", "PreceptorCourseAssignmentModel", "DeviceModel", "UserRoleEnum",
     "TimeSlotModel", "ScheduleExceptionModel",
     "ShiftTypeEnum", "ActivityTypeEnum",
-    "SubjectModel", "TeacherModel", "CourseSubjectTeacherModel", "ClassPeriodModel",
+    "SubjectModel", "SubjectApplicabilityModel", "SubjectTypeEnum",
+    "TeacherModel", "CourseSubjectTeacherModel", "ClassPeriodModel",
     "PeriodTypeEnum",
     "CoursePreceptorModel", "CoursePreceptorTempAssignmentModel",
     "AttendanceRecordModel", "EarlyDepartureModel",
