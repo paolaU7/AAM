@@ -15,7 +15,11 @@ class Specialty:
 @dataclass(frozen=True)
 class SchoolSettings:
     """Fila única de configuración general: techo de año de cursada y de
-    división ofrecidos en los desplegables de alta de curso."""
+    división ofrecidos en los desplegables de alta de curso, más los
+    umbrales que usa el panel de notificaciones (campana del header)."""
 
     max_grade_year: int
     max_division: int
+    consecutive_absences_alert_threshold: int = 3
+    preceptor_temp_assignment_alert_days: int = 2
+    schedule_exception_alert_days: int = 2

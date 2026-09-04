@@ -5,11 +5,11 @@ class GetStudents {
   const GetStudents(this.repository);
   final StudentRepository repository;
 
-  Future<List<Student>> call({String? cursoId}) async {
+  Future<List<Student>> call({String? cursoId, bool incluirInactivos = false}) async {
     if (cursoId != null) {
       return repository.getAlumnosPorCurso(cursoId);
     }
-    return repository.getAlumnos();
+    return repository.getAlumnos(incluirInactivos: incluirInactivos);
   }
 }
 

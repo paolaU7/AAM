@@ -5,7 +5,11 @@ from app.domain.entities.student import Alumno
 class AlumnoRepository(ABC):
 
     @abstractmethod
-    def get_alumnos(self) -> List[Alumno]: ...
+    def get_alumnos(self, incluir_inactivos: bool = False) -> List[Alumno]:
+        """Por default solo trae activos — los dados de baja quedan afuera
+        de cualquier selector (asistencia manual, alumnos en riesgo, etc.)
+        salvo que se pida explícitamente lo contrario."""
+        ...
 
     @abstractmethod
     def get_alumno_por_id(self, id: str) -> Optional[Alumno]: ...

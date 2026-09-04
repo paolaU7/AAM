@@ -30,6 +30,11 @@ class SchoolSettingsRepositoryImpl(SchoolSettingsRepository):
         m = self.db.query(SchoolSettingsModel).first()
         if m is None:
             # Red de seguridad: si por algún motivo la fila sembrada no
-            # está, no rompemos el desplegable — usamos el techo absoluto.
+            # está, no rompemos el desplegable — usamos los defaults.
             return SchoolSettings(max_grade_year=7, max_division=4)
-        return SchoolSettings(max_grade_year=m.max_grade_year, max_division=m.max_division)
+        return SchoolSettings(
+            max_grade_year=m.max_grade_year, max_division=m.max_division,
+            consecutive_absences_alert_threshold=m.consecutive_absences_alert_threshold,
+            preceptor_temp_assignment_alert_days=m.preceptor_temp_assignment_alert_days,
+            schedule_exception_alert_days=m.schedule_exception_alert_days,
+        )

@@ -41,9 +41,11 @@ class AlumnoRepositoryImpl(AlumnoRepository):
             taller=student.workshop_group.group_label if student.workshop_group else None,
         )
 
-    def get_alumnos(self) -> List[Alumno]:
-        rows = self.db.query(StudentModel).all()
-        return [self._to_entity(s) for s in rows]
+    def get_alumnos(self, incluir_inactivos: bool = False) -> List[Alumno]:
+        query = self.db.query(StudentModel)
+        if not incluir_inactivos:
+            query = query.filter(StudentModel.is_active.is_(True))
+        return [self._to_entity(s) for s in query.all()]
 
     def get_alumno_por_id(self, id: str) -> Optional[Alumno]:
         student = self.db.query(StudentModel).filter(StudentModel.id == id).first()

@@ -5,7 +5,8 @@ import '../entities/workshop_group.dart';
 /// Puerto de salida — el dominio define QUÉ necesita,
 /// sin saber nada de FastAPI ni PostgreSQL.
 abstract class StudentRepository {
-  Future<List<Student>> getAlumnos();
+  /// Por default trae solo alumnos activos.
+  Future<List<Student>> getAlumnos({bool incluirInactivos = false});
   Future<List<Student>> getAlumnosPorCurso(String cursoId);
   Future<Student?> getAlumnoPorId(String id);
   Future<Student?> getAlumnoPorDni(String dni);

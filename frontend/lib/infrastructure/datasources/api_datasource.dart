@@ -10,6 +10,7 @@ import '../../domain/entities/academic.dart';
 import '../../domain/entities/class_period.dart';
 import '../../domain/entities/preceptor_assignment.dart';
 import '../../domain/entities/specialty.dart';
+import '../../domain/entities/notification.dart';
 
 /// Error de API que expone el mensaje del backend tal cual (para mostrarlo al
 /// usuario, p.ej. "Ya existe un alumno registrado con ese DNI.").
@@ -24,9 +25,12 @@ class ApiException implements Exception {
 class ApiDatasource {
   static const String baseUrl = 'http://localhost:8000';
 
-  Future<List<Student>> getAlumnos() async {
+  /// Por default trae solo alumnos activos — los dados de baja quedan
+  /// afuera de cualquier selector (asistencia manual, alumnos en riesgo,
+  /// etc.) salvo que se pida explícitamente lo contrario.
+  Future<List<Student>> getAlumnos({bool incluirInactivos = false}) async {
     final response = await http
-        .get(Uri.parse('$baseUrl/alumnos'))
+        .get(Uri.parse('$baseUrl/alumnos?incluir_inactivos=$incluirInactivos'))
         .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) throw Exception('Error al obtener alumnos');
     final List<dynamic> data = jsonDecode(response.body);
@@ -114,6 +118,16 @@ class ApiDatasource {
     final response = await http.get(Uri.parse('$baseUrl/school-settings')).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) throw Exception('Error al obtener la configuración del colegio');
     return SchoolSettings.fromJson(jsonDecode(response.body));
+  }
+
+  // ── Notificaciones (campana del header) ──────────────────────────────────────
+  // Se calculan al vuelo cada vez que se piden — no hay tabla ni estado de
+  // leído/no leído.
+  Future<List<AppNotification>> getNotifications() async {
+    final response = await http.get(Uri.parse('$baseUrl/notifications')).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) throw Exception('Error al obtener notificaciones');
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((j) => AppNotification.fromJson(j)).toList();
   }
 
   // ── Alta manual en cascada (año lectivo → año de cursada → división) ───────

@@ -17,8 +17,8 @@ class GetAlumnos:
     def __init__(self, repo: AlumnoRepository):
         self.repo = repo
 
-    def execute(self) -> List[Alumno]:
-        return self.repo.get_alumnos()
+    def execute(self, incluir_inactivos: bool = False) -> List[Alumno]:
+        return self.repo.get_alumnos(incluir_inactivos=incluir_inactivos)
 
 
 class GetAlumnoPorId:

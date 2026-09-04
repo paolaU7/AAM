@@ -9,6 +9,7 @@ import '../../infrastructure/datasources/api_datasource.dart';
 import '../../infrastructure/repositories/attendance_repository_impl.dart';
 import '../../infrastructure/repositories/course_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
+import '../widgets/auto_refresh_mixin.dart';
 
 class AsistenciaScreen extends StatefulWidget {
   const AsistenciaScreen({super.key});
@@ -17,13 +18,19 @@ class AsistenciaScreen extends StatefulWidget {
   State<AsistenciaScreen> createState() => _AsistenciaScreenState();
 }
 
-class _AsistenciaScreenState extends State<AsistenciaScreen> {
+class _AsistenciaScreenState extends State<AsistenciaScreen> with AutoRefreshMixin<AsistenciaScreen> {
   late final ApiDatasource _ds;
   late final GetDailyAttendance _getAsistencia;
   late final CourseRepositoryImpl _cursoRepo;
   late final AttendanceRepositoryImpl _asistenciaRepo;
 
-  late Future<(List<Course>, List<AttendanceRecord>)> _future;
+  // _cursos == null solo en el primer load — el autorefresh (silent: true)
+  // actualiza estos campos sin tocar _loading, así los registros de
+  // asistencia se van refrescando solos sin pantalla de carga.
+  List<Course>? _cursos;
+  List<AttendanceRecord> _registros = [];
+  bool _loading = true;
+  String? _error;
 
   Course? _cursoSeleccionado;
   DateTime _fecha = DateTime.now();
@@ -36,35 +43,42 @@ class _AsistenciaScreenState extends State<AsistenciaScreen> {
     _getAsistencia  = GetDailyAttendance(_asistenciaRepo);
     _cursoRepo      = CourseRepositoryImpl(_ds);
     _loadData();
+    startAutoRefresh();
   }
 
-  void _loadData() {
-    _future = Future.wait([
-      _cursoRepo.getCourses(),
-      if (_cursoSeleccionado != null)
-        _getAsistencia(courseId: _cursoSeleccionado!.id, date: _fecha)
-      else
-        Future.value(<AttendanceRecord>[]),
-    ]).then((results) {
-      final cursos    = results[0] as List<Course>;
-      final registros = results[1] as List<AttendanceRecord>;
+  @override
+  void onAutoRefresh() => _loadData(silent: true);
+
+  Future<void> _loadData({bool silent = false}) async {
+    if (!silent) setState(() { _loading = true; _error = null; });
+    try {
+      final cursos = await _cursoRepo.getCourses();
       _cursoSeleccionado ??= cursos.isNotEmpty ? cursos.first : null;
-      return (cursos, registros);
-    });
+      final registros = _cursoSeleccionado != null
+          ? await _getAsistencia(courseId: _cursoSeleccionado!.id, date: _fecha)
+          : <AttendanceRecord>[];
+      if (mounted) {
+        setState(() {
+          _cursos = cursos;
+          _registros = registros;
+          _error = null;
+        });
+      }
+    } catch (_) {
+      if (mounted && !silent) setState(() => _error = 'Error al cargar asistencia');
+    } finally {
+      if (mounted && !silent) setState(() => _loading = false);
+    }
   }
 
   void _onCursoChanged(Course curso) {
-    setState(() {
-      _cursoSeleccionado = curso;
-      _loadData();
-    });
+    setState(() => _cursoSeleccionado = curso);
+    _loadData();
   }
 
   void _cambiarFecha(int dias) {
-    setState(() {
-      _fecha = _fecha.add(Duration(days: dias));
-      _loadData();
-    });
+    setState(() => _fecha = _fecha.add(Duration(days: dias)));
+    _loadData();
   }
 
   // ── Modales ────────────────────────────────────────────────────────────────
@@ -85,7 +99,7 @@ class _AsistenciaScreenState extends State<AsistenciaScreen> {
             entryTimestamp: entryTimestamp,
             status:         status,
           );
-          setState(_loadData);
+          _loadData();
         },
       ),
     );
@@ -105,7 +119,7 @@ class _AsistenciaScreenState extends State<AsistenciaScreen> {
             reason:              motivo,
             registeredByUserId:  registradoPor,
           );
-          setState(_loadData);
+          _loadData();
         },
       ),
     );
@@ -119,7 +133,7 @@ class _AsistenciaScreenState extends State<AsistenciaScreen> {
         registro: registro,
         onConfirm: () async {
           await _asistenciaRepo.markNonComputable(registro.id);
-          setState(_loadData);
+          _loadData();
         },
       ),
     );
@@ -148,33 +162,20 @@ class _AsistenciaScreenState extends State<AsistenciaScreen> {
           ],
         ),
         Expanded(
-          child: FutureBuilder<(List<Course>, List<AttendanceRecord>)>(
-            future: _future,
-            builder: (context, snap) {
-              if (snap.connectionState != ConnectionState.done) {
-                return const AAMLoadingScreen();
-              }
-              if (snap.hasError) {
-                return AAMErrorWidget(
-                  message: 'Error al cargar asistencia',
-                  onRetry: () => setState(_loadData),
-                );
-              }
-
-              final (cursos, registros) = snap.data!;
-
-              return Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(children: [
-                  _buildSelector(cursos, theme),
-                  const SizedBox(height: 24),
-                  _buildMiniStats(registros),
-                  const SizedBox(height: 24),
-                  Expanded(child: _buildTabla(registros, theme)),
-                ]),
-              );
-            },
-          ),
+          child: _loading && _cursos == null
+              ? const AAMLoadingScreen()
+              : _error != null && _cursos == null
+                  ? AAMErrorWidget(message: _error!, onRetry: () => _loadData())
+                  : Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(children: [
+                        _buildSelector(_cursos ?? [], theme),
+                        const SizedBox(height: 24),
+                        _buildMiniStats(_registros),
+                        const SizedBox(height: 24),
+                        Expanded(child: _buildTabla(_registros, theme)),
+                      ]),
+                    ),
         ),
       ],
     );

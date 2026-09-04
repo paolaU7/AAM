@@ -8,6 +8,7 @@ import '../../domain/usecases/create_student.dart';
 import '../../infrastructure/datasources/api_datasource.dart';
 import '../../infrastructure/repositories/student_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
+import '../widgets/auto_refresh_mixin.dart';
 
 class AlumnosScreen extends StatefulWidget {
   const AlumnosScreen({super.key});
@@ -16,17 +17,24 @@ class AlumnosScreen extends StatefulWidget {
   State<AlumnosScreen> createState() => _AlumnosScreenState();
 }
 
-class _AlumnosScreenState extends State<AlumnosScreen> {
+class _AlumnosScreenState extends State<AlumnosScreen> with AutoRefreshMixin<AlumnosScreen> {
   late final StudentRepositoryImpl _repo;
   late final GetStudents _getStudents;
   late final CreateStudent _createStudent;
-  late Future<List<Student>> _future;
+
+  // null = todavía no cargó nunca (primer load). El autorefresh (silent:
+  // true) actualiza esta lista sin tocar _loading, así no tapa la pantalla
+  // con un spinner cada 30s.
+  List<Student>? _alumnos;
+  bool _loading = true;
+  String? _error;
 
   String _searchQuery = '';
   int? _filterAnio;       // año de cursada (grade_year) — null = todos
   int? _filterDivision;   // null = todas
   String _filterTaller = 'Todos';
   String _filterEstado = 'Todos';
+  bool _mostrarInactivos = false;
 
   @override
   void initState() {
@@ -35,10 +43,31 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
     _repo = StudentRepositoryImpl(api);
     _getStudents = GetStudents(_repo);
     _createStudent = CreateStudent(_repo);
-    _future = _getStudents();
+    _cargar();
+    startAutoRefresh();
   }
 
-  void _refresh() => setState(() => _future = _getStudents());
+  @override
+  void onAutoRefresh() => _cargar(silent: true);
+
+  Future<void> _cargar({bool silent = false}) async {
+    if (!silent) setState(() { _loading = true; _error = null; });
+    try {
+      final data = await _getStudents(incluirInactivos: _mostrarInactivos);
+      if (mounted) setState(() { _alumnos = data; _error = null; });
+    } catch (_) {
+      if (mounted && !silent) setState(() => _error = 'Error al cargar alumnos');
+    } finally {
+      if (mounted && !silent) setState(() => _loading = false);
+    }
+  }
+
+  void _refresh() => _cargar();
+
+  void _toggleMostrarInactivos(bool v) {
+    setState(() => _mostrarInactivos = v);
+    _cargar();
+  }
 
   Future<void> _abrirNuevoAlumno() async {
     final result = await showDialog<bool>(
@@ -125,30 +154,21 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
           ],
         ),
         Expanded(
-          child: FutureBuilder<List<Student>>(
-            future: _future,
-            builder: (context, snap) {
-              if (snap.connectionState != ConnectionState.done) {
-                return const AAMLoadingScreen();
-              }
-              if (snap.hasError) {
-                return AAMErrorWidget(
-                  message: 'Error al cargar alumnos',
-                  onRetry: () => setState(() => _future = _getStudents()),
-                );
-              }
-
-              final alumnos = _applyFilters(snap.data!);
-              final aniosOpts = snap.data!.map((a) => a.gradeYear).toSet().toList()..sort();
-              final divisionOpts = snap.data!.map((a) => a.division).toSet().toList()..sort();
-              final tallerOpts = ['Todos', ...snap.data!.map((a) => a.taller ?? 'Sin grupo').toSet().toList()..sort()];
-
-              return Padding(
-                padding: const EdgeInsets.all(32),
-                child: _buildContent(theme, aniosOpts, divisionOpts, tallerOpts, snap.data!.length, alumnos),
-              );
-            },
-          ),
+          child: _loading && _alumnos == null
+              ? const AAMLoadingScreen()
+              : _error != null && _alumnos == null
+                  ? AAMErrorWidget(message: _error!, onRetry: _refresh)
+                  : Builder(builder: (context) {
+                      final todos = _alumnos ?? [];
+                      final alumnos = _applyFilters(todos);
+                      final aniosOpts = todos.map((a) => a.gradeYear).toSet().toList()..sort();
+                      final divisionOpts = todos.map((a) => a.division).toSet().toList()..sort();
+                      final tallerOpts = ['Todos', ...todos.map((a) => a.taller ?? 'Sin grupo').toSet().toList()..sort()];
+                      return Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: _buildContent(theme, aniosOpts, divisionOpts, tallerOpts, todos.length, alumnos),
+                      );
+                    }),
         ),
       ],
     );
@@ -262,6 +282,8 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
         ),
       ),
       const SizedBox(width: 12),
+      _buildMostrarInactivos(theme),
+      const SizedBox(width: 12),
       _buildLimpiarFiltros(theme),
       const SizedBox(width: 12),
       Text(
@@ -281,6 +303,26 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
       _filterTaller = 'Todos';
       _filterEstado = 'Todos';
     });
+  }
+
+  Widget _buildMostrarInactivos(AAMTheme theme) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Transform.scale(
+        scale: 0.8,
+        child: Switch(
+          value: _mostrarInactivos,
+          activeThumbColor: AAMColors.accent,
+          onChanged: _toggleMostrarInactivos,
+        ),
+      ),
+      GestureDetector(
+        onTap: () => _toggleMostrarInactivos(!_mostrarInactivos),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: Text('Mostrar inactivos', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
+        ),
+      ),
+    ]);
   }
 
   Widget _buildLimpiarFiltros(AAMTheme theme) {
@@ -316,12 +358,12 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
           ('Alumno',       3),
           ('Año',          1),
           ('División',     1),
-          ('Taller',       2),
+          ('Taller',       1),
           ('DNI',          2),
           ('Asistencia',   2),
           ('Estado',       2),
           ('Activo',       1),
-          ('',             2),
+          ('',             3),
         ]),
         Expanded(
           child: alumnos.isEmpty
@@ -443,7 +485,7 @@ class _AlumnoRowState extends State<_AlumnoRow> {
               Expanded(flex: 1, child: Text(a.division > 0 ? divisionOrdinal(a.division) : '—',
                 style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.text))),
               // Taller
-              Expanded(flex: 2, child: Text(a.taller ?? '—',
+              Expanded(flex: 1, child: Text(a.taller ?? '—',
                 style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
               // DNI
               Expanded(flex: 2, child: Text(a.dniFormateado,
@@ -471,7 +513,7 @@ class _AlumnoRowState extends State<_AlumnoRow> {
                 color: a.isActive ? AAMColors.success : AAMColors.textSec,
               )),
               // Acciones
-              Expanded(flex: 2, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              Expanded(flex: 3, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
                 _ActionBtn(
                   icon: Icons.visibility_outlined,
                   color: widget.theme.text,
@@ -486,12 +528,19 @@ class _AlumnoRowState extends State<_AlumnoRow> {
                   onTap: widget.onEditar,
                 ),
                 const SizedBox(width: 6),
-                _ActionBtn(
-                  icon: a.isActive ? Icons.block_outlined : Icons.check_circle_outline,
-                  color: a.isActive ? AAMColors.highlight : AAMColors.success,
-                  tooltip: a.isActive ? 'Dar de baja' : 'Reactivar',
-                  onTap: widget.onToggleActivo,
-                ),
+                // Un alumno inactivo muestra la etiqueta "Reactivar" bien
+                // explícita (no solo un ícono con estado invertido) — así
+                // nadie hace click pensando que está dando de baja a
+                // alguien que ya está dado de baja.
+                if (a.isActive)
+                  _ActionBtn(
+                    icon: Icons.block_outlined,
+                    color: AAMColors.highlight,
+                    tooltip: 'Dar de baja',
+                    onTap: widget.onToggleActivo,
+                  )
+                else
+                  _ReactivarButton(onTap: widget.onToggleActivo),
               ])),
             ]),
           ),
@@ -534,6 +583,46 @@ class _ActionBtnState extends State<_ActionBtn> {
             message: widget.tooltip,
             child: Icon(widget.icon, size: 16, color: widget.color),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Acción de reactivar un alumno inactivo — con label visible en vez de
+/// solo un ícono, para que no se confunda con "dar de baja" a alguien que
+/// ya está de baja.
+class _ReactivarButton extends StatefulWidget {
+  const _ReactivarButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  State<_ReactivarButton> createState() => _ReactivarButtonState();
+}
+
+class _ReactivarButtonState extends State<_ReactivarButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit:  (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: AAMColors.success.withAlpha(((_hovered ? 0.16 : 0.08) * 255).round()),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.check_circle_outline, size: 14, color: AAMColors.success),
+            const SizedBox(width: 4),
+            Text('Reactivar', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AAMColors.success)),
+          ]),
         ),
       ),
     );

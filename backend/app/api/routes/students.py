@@ -78,9 +78,9 @@ def _to_response(a: Alumno) -> AlumnoResponse:
     )
 
 @router.get("", response_model=List[AlumnoResponse])
-def get_alumnos(db: Session = Depends(get_db)):
+def get_alumnos(incluir_inactivos: bool = False, db: Session = Depends(get_db)):
     repo = AlumnoRepositoryImpl(db)
-    return [_to_response(a) for a in GetAlumnos(repo).execute()]
+    return [_to_response(a) for a in GetAlumnos(repo).execute(incluir_inactivos=incluir_inactivos)]
 
 @router.get("/{id}", response_model=AlumnoResponse)
 def get_alumno(id: str, db: Session = Depends(get_db)):

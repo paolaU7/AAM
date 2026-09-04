@@ -7,6 +7,7 @@ from app.api.routes.users import router as users_router
 from app.api.routes.attendance import router as attendance_router
 from app.api.routes.academic import router as academic_router
 from app.api.routes.specialties import router as specialties_router
+from app.api.routes.notifications import router as notifications_router
 
 app = FastAPI(title="AAM API", version="0.1.0")
 
@@ -26,3 +27,4 @@ app.include_router(users_router)
 app.include_router(attendance_router)
 app.include_router(academic_router)
 app.include_router(specialties_router)
+app.include_router(notifications_router)

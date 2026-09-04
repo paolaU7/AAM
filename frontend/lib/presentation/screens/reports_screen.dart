@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../domain/entities/course.dart';
 import '../../infrastructure/datasources/api_datasource.dart';
 import '../widgets/aam_design_system.dart';
+import '../widgets/auto_refresh_mixin.dart';
 
 class ReportesScreen extends StatefulWidget {
   const ReportesScreen({super.key});
@@ -11,7 +12,7 @@ class ReportesScreen extends StatefulWidget {
   State<ReportesScreen> createState() => _ReportesScreenState();
 }
 
-class _ReportesScreenState extends State<ReportesScreen> {
+class _ReportesScreenState extends State<ReportesScreen> with AutoRefreshMixin<ReportesScreen> {
   final ApiDatasource _ds = ApiDatasource();
   List<Course> _cursos = [];
 
@@ -19,7 +20,11 @@ class _ReportesScreenState extends State<ReportesScreen> {
   void initState() {
     super.initState();
     _cargarCursos();
+    startAutoRefresh();
   }
+
+  @override
+  void onAutoRefresh() => _cargarCursos();
 
   Future<void> _cargarCursos() async {
     try {

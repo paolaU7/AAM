@@ -12,6 +12,7 @@ import '../../infrastructure/datasources/api_datasource.dart';
 import '../../infrastructure/repositories/course_repository_impl.dart';
 import '../../infrastructure/repositories/time_slot_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
+import '../widgets/auto_refresh_mixin.dart';
 
 /// Sección "Cursos" del panel de Dirección. Reemplaza a la antigua pantalla
 /// independiente de Horarios: el turno principal y el horario detallado
@@ -23,7 +24,7 @@ class CursosScreen extends StatefulWidget {
   State<CursosScreen> createState() => _CursosScreenState();
 }
 
-class _CursosScreenState extends State<CursosScreen> {
+class _CursosScreenState extends State<CursosScreen> with AutoRefreshMixin<CursosScreen> {
   final ApiDatasource _ds = ApiDatasource();
   late final CourseRepositoryImpl _courseRepo;
 
@@ -46,13 +47,19 @@ class _CursosScreenState extends State<CursosScreen> {
     super.initState();
     _courseRepo = CourseRepositoryImpl(_ds);
     _cargar();
+    startAutoRefresh();
   }
 
-  Future<void> _cargar() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  @override
+  void onAutoRefresh() => _cargar(silent: true);
+
+  Future<void> _cargar({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final results = await Future.wait([
         _courseRepo.getCourses(),
@@ -66,9 +73,9 @@ class _CursosScreenState extends State<CursosScreen> {
         _settings = results[2] as SchoolSettings;
       });
     } catch (_) {
-      if (mounted) setState(() => _error = 'No se pudieron cargar los cursos.');
+      if (mounted && !silent) setState(() => _error = 'No se pudieron cargar los cursos.');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && !silent) setState(() => _loading = false);
     }
   }
 

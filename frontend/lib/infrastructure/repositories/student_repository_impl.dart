@@ -9,7 +9,8 @@ class StudentRepositoryImpl implements StudentRepository {
   final ApiDatasource _datasource;
 
   @override
-  Future<List<Student>> getAlumnos() => _datasource.getAlumnos();
+  Future<List<Student>> getAlumnos({bool incluirInactivos = false}) =>
+      _datasource.getAlumnos(incluirInactivos: incluirInactivos);
 
   @override
   Future<List<Student>> getAlumnosPorCurso(String cursoId) async {

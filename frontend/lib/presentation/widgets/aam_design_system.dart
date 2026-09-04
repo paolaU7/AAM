@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'notification_bell.dart';
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
 /// Altura única de la franja superior — la usan tanto el header (AAMTopbar)
@@ -99,16 +100,7 @@ class AAMTopbar extends StatelessWidget {
               const Spacer(),
               if (actions != null) ...actions!,
               const SizedBox(width: 12),
-              Stack(children: [
-                Icon(Icons.notifications_outlined, size: 22, color: theme.textSec),
-                Positioned(
-                  top: 0, right: 0,
-                  child: Container(
-                    width: 8, height: 8,
-                    decoration: const BoxDecoration(color: AAMColors.highlight, shape: BoxShape.circle),
-                  ),
-                ),
-              ]),
+              const NotificationBell(),
               const SizedBox(width: 12),
               const AAMThemeToggle(),
             ],

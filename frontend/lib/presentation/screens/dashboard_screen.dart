@@ -7,6 +7,7 @@ import '../../infrastructure/datasources/api_datasource.dart';
 import '../../infrastructure/repositories/attendance_repository_impl.dart';
 import '../../infrastructure/repositories/course_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
+import '../widgets/auto_refresh_mixin.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -15,10 +16,13 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen> with AutoRefreshMixin<DashboardScreen> {
   // ── Inyección de dependencias (manual, sin provider aún) ──────────────────
   late final GetDashboardSummary _getDashboardSummary;
-  late Future<DashboardSummary> _future;
+
+  DashboardSummary? _data;
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -28,7 +32,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
       attendanceRepository: AttendanceRepositoryImpl(ds),
       courseRepository:      CourseRepositoryImpl(ds),
     );
-    _future = _getDashboardSummary(DateTime.now());
+    _cargar();
+    startAutoRefresh();
+  }
+
+  @override
+  void onAutoRefresh() => _cargar(silent: true);
+
+  Future<void> _cargar({bool silent = false}) async {
+    if (!silent) setState(() { _loading = true; _error = null; });
+    try {
+      final data = await _getDashboardSummary(DateTime.now());
+      if (mounted) setState(() { _data = data; _error = null; });
+    } catch (_) {
+      if (mounted && !silent) setState(() => _error = 'Error al cargar el dashboard');
+    } finally {
+      if (mounted && !silent) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -37,21 +57,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       children: [
         const AAMTopbar(title: 'Dashboard'),
         Expanded(
-          child: FutureBuilder<DashboardSummary>(
-            future: _future,
-            builder: (context, snap) {
-              if (snap.connectionState != ConnectionState.done) {
-                return const AAMLoadingScreen();
-              }
-              if (snap.hasError) {
-                return AAMErrorWidget(
-                  message: 'Error al cargar el dashboard',
-                  onRetry: () => setState(() { _future = _getDashboardSummary(DateTime.now()); }),
-                );
-              }
-              return _DashboardContent(data: snap.data!);
-            },
-          ),
+          child: _loading && _data == null
+              ? const AAMLoadingScreen()
+              : _error != null && _data == null
+                  ? AAMErrorWidget(message: _error!, onRetry: () => _cargar())
+                  : _DashboardContent(data: _data!),
         ),
       ],
     );

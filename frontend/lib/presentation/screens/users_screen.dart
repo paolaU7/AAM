@@ -5,6 +5,7 @@ import '../../domain/usecases/create_user.dart';
 import '../../infrastructure/datasources/api_datasource.dart';
 import '../../infrastructure/repositories/user_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
+import '../widgets/auto_refresh_mixin.dart';
 
 class UsuariosScreen extends StatefulWidget {
   const UsuariosScreen({super.key});
@@ -13,20 +14,39 @@ class UsuariosScreen extends StatefulWidget {
   State<UsuariosScreen> createState() => _UsuariosScreenState();
 }
 
-class _UsuariosScreenState extends State<UsuariosScreen> {
+class _UsuariosScreenState extends State<UsuariosScreen> with AutoRefreshMixin<UsuariosScreen> {
   late final UserRepositoryImpl _repo;
   late final CreateUser _crearUsuario;
-  late Future<List<User>> _future;
+
+  List<User>? _usuarios;
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
     _repo         = UserRepositoryImpl(ApiDatasource());
     _crearUsuario = CreateUser(_repo);
-    _future       = _repo.getUsers();
+    _cargar();
+    startAutoRefresh();
   }
 
-  void _refresh() => setState(() => _future = _repo.getUsers());
+  @override
+  void onAutoRefresh() => _cargar(silent: true);
+
+  Future<void> _cargar({bool silent = false}) async {
+    if (!silent) setState(() { _loading = true; _error = null; });
+    try {
+      final data = await _repo.getUsers();
+      if (mounted) setState(() { _usuarios = data; _error = null; });
+    } catch (_) {
+      if (mounted && !silent) setState(() => _error = 'Error al cargar usuarios');
+    } finally {
+      if (mounted && !silent) setState(() => _loading = false);
+    }
+  }
+
+  void _refresh() => _cargar();
 
   void _abrirModal() {
     showDialog<CreatedUser>(
@@ -78,28 +98,18 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
           ],
         ),
         Expanded(
-          child: FutureBuilder<List<User>>(
-            future: _future,
-            builder: (context, snap) {
-              if (snap.connectionState != ConnectionState.done) {
-                return const AAMLoadingScreen();
-              }
-              if (snap.hasError) {
-                return AAMErrorWidget(
-                  message: 'Error al cargar usuarios', onRetry: _refresh,
-                );
-              }
-
-              return Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(children: [
-                  _buildBanner(theme),
-                  const SizedBox(height: 20),
-                  Expanded(child: _buildTabla(snap.data!, theme)),
-                ]),
-              );
-            },
-          ),
+          child: _loading && _usuarios == null
+              ? const AAMLoadingScreen()
+              : _error != null && _usuarios == null
+                  ? AAMErrorWidget(message: _error!, onRetry: _refresh)
+                  : Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(children: [
+                        _buildBanner(theme),
+                        const SizedBox(height: 20),
+                        Expanded(child: _buildTabla(_usuarios ?? [], theme)),
+                      ]),
+                    ),
         ),
       ],
     );
