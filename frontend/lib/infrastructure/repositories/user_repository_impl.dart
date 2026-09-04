@@ -32,4 +32,16 @@ class UserRepositoryImpl implements UserRepository {
 
   @override
   Future<String> resetPassword(String userId) => _datasource.resetUserPassword(userId);
+
+  @override
+  Future<User> updateUser({
+    required String id,
+    required String firstName,
+    required String lastName,
+    required UserRole role,
+  }) =>
+      _datasource.actualizarUsuario(id: id, firstName: firstName, lastName: lastName, role: role);
+
+  @override
+  Future<void> deleteUser(String id) => _datasource.eliminarUsuario(id);
 }

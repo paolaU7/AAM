@@ -22,6 +22,17 @@ class UsuarioRepository(ABC):
     def toggle_active(self, id: str) -> Optional[Usuario]: ...
 
     @abstractmethod
+    def actualizar_usuario(self, id: str, nombre: str, apellido: str, rol: RolUsuario) -> Optional[Usuario]: ...
+
+    @abstractmethod
+    def eliminar_usuario(self, id: str) -> bool:
+        """Borra físicamente al usuario. Puede levantar ValueError con un
+        mensaje legible si tiene registros asociados (asistencias,
+        asignaciones de preceptor, horarios, etc.) — usar `toggle_active`
+        para revocar acceso sin perder el historial en ese caso."""
+        ...
+
+    @abstractmethod
     def reset_password(self, id: str) -> Optional[str]:
         """Genera y persiste una nueva contraseña; devuelve el texto plano
         (o None si el usuario no existe)."""

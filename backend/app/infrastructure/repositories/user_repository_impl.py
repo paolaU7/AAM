@@ -3,6 +3,7 @@ import string
 from typing import List, Optional, Tuple
 import bcrypt
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from app.domain.entities.user import Usuario, RolUsuario
 from app.domain.repositories.user_repository import UsuarioRepository
 from app.infrastructure.models.user_model import UserModel, UserRoleEnum
@@ -88,3 +89,29 @@ class UsuarioRepositoryImpl(UsuarioRepository):
         model.password_hash = _hash_password(password)
         self.db.commit()
         return password
+
+    def actualizar_usuario(self, id: str, nombre: str, apellido: str, rol: RolUsuario) -> Optional[Usuario]:
+        model = self.db.query(UserModel).filter(UserModel.id == id).first()
+        if model is None:
+            return None
+        model.full_name = f"{apellido}, {nombre}"
+        model.role = UserRoleEnum(rol.value)
+        self.db.commit()
+        self.db.refresh(model)
+        return self._to_entity(model)
+
+    def eliminar_usuario(self, id: str) -> bool:
+        model = self.db.query(UserModel).filter(UserModel.id == id).first()
+        if model is None:
+            return False
+        self.db.delete(model)
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            raise ValueError(
+                "No se puede eliminar: el usuario tiene registros asociados "
+                "(asistencias, asignaciones de preceptor, horarios, etc.). "
+                "Desactivalo en su lugar si querés revocarle el acceso."
+            )
+        return True

@@ -592,6 +592,48 @@ class ApiDatasource {
     return data['password_temporal'];
   }
 
+  Future<User> actualizarUsuario({
+    required String id,
+    required String firstName,
+    required String lastName,
+    required UserRole role,
+  }) async {
+    final body = {
+      'nombre': firstName,
+      'apellido': lastName,
+      'rol': role.name,
+    };
+    final response = await http
+        .put(
+          Uri.parse('$baseUrl/users/$id'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) {
+      return _userFromJson(jsonDecode(response.body));
+    }
+    String detail = '';
+    try {
+      detail = (jsonDecode(response.body)['detail'] ?? '').toString();
+    } catch (_) {}
+    throw ApiException(detail.isNotEmpty ? detail : 'No se pudo actualizar el usuario.');
+  }
+
+  /// Borrado físico — puede rechazarse (409) si el usuario tiene registros
+  /// asociados (asistencias, asignaciones de preceptor, etc.).
+  Future<void> eliminarUsuario(String id) async {
+    final response = await http
+        .delete(Uri.parse('$baseUrl/users/$id'))
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 204) return;
+    String detail = '';
+    try {
+      detail = (jsonDecode(response.body)['detail'] ?? '').toString();
+    } catch (_) {}
+    throw ApiException(detail.isNotEmpty ? detail : 'No se pudo eliminar el usuario.');
+  }
+
   User _userFromJson(Map<String, dynamic> json) {
     return User(
       id: json['id'].toString(),

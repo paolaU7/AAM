@@ -56,3 +56,26 @@ class ResetPassword:
 
     def execute(self, id: str) -> Optional[str]:
         return self.repo.reset_password(id)
+
+
+class ActualizarUsuario:
+    def __init__(self, repo: UsuarioRepository):
+        self.repo = repo
+
+    def execute(self, id: str, *, nombre: str, apellido: str, rol: RolUsuario) -> Optional[Usuario]:
+        nombre = (nombre or "").strip()
+        apellido = (apellido or "").strip()
+        if not nombre or not apellido:
+            raise AltaUsuarioError("Nombre y apellido son obligatorios.", 400)
+        return self.repo.actualizar_usuario(id, nombre, apellido, rol)
+
+
+class EliminarUsuario:
+    def __init__(self, repo: UsuarioRepository):
+        self.repo = repo
+
+    def execute(self, id: str) -> bool:
+        try:
+            return self.repo.eliminar_usuario(id)
+        except ValueError as e:
+            raise AltaUsuarioError(str(e), 409)

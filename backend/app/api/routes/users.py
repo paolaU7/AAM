@@ -5,7 +5,8 @@ from pydantic import BaseModel
 from app.infrastructure.database import get_db
 from app.infrastructure.repositories.user_repository_impl import UsuarioRepositoryImpl
 from app.domain.usecases.user_usecases import (
-    GetUsuarios, CrearUsuario, ToggleActive, ResetPassword, AltaUsuarioError,
+    GetUsuarios, CrearUsuario, ToggleActive, ResetPassword,
+    ActualizarUsuario, EliminarUsuario, AltaUsuarioError,
 )
 from app.domain.entities.user import Usuario, RolUsuario
 
@@ -22,6 +23,12 @@ class UserResponse(BaseModel):
 
 
 class UserCreate(BaseModel):
+    nombre: str
+    apellido: str
+    rol: str  # 'principal' | 'preceptor'
+
+
+class UserUpdate(BaseModel):
     nombre: str
     apellido: str
     rol: str  # 'principal' | 'preceptor'
@@ -87,3 +94,34 @@ def reset_password(id: str, db: Session = Depends(get_db)):
     if password is None:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     return ResetPasswordResponse(password_temporal=password)
+
+
+@router.put("/{id}", response_model=UserResponse)
+def actualizar_usuario(id: str, body: UserUpdate, db: Session = Depends(get_db)):
+    try:
+        rol = RolUsuario(body.rol)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Rol inválido. Debe ser 'principal' o 'preceptor'.")
+
+    repo = UsuarioRepositoryImpl(db)
+    try:
+        usuario = ActualizarUsuario(repo).execute(id, nombre=body.nombre, apellido=body.apellido, rol=rol)
+    except AltaUsuarioError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+    if usuario is None:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return _to_response(usuario)
+
+
+@router.delete("/{id}", status_code=204)
+def eliminar_usuario(id: str, db: Session = Depends(get_db)):
+    """Borrado físico — puede rechazarse (409) si el usuario tiene registros
+    asociados. Para revocar acceso sin perder historial, usar toggle-active."""
+    repo = UsuarioRepositoryImpl(db)
+    try:
+        ok = EliminarUsuario(repo).execute(id)
+    except AltaUsuarioError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return None
