@@ -62,61 +62,24 @@ flutter run -d chrome
 
 ---
 
-## Cómo conectar el backend FastAPI
+## Backend (Go)
 
-Cuando el backend esté listo, **solo tocás infrastructure**. El dominio y la UI no cambian.
+El backend vive en [`backend/`](backend/) y está escrito en **Go** con
+arquitectura hexagonal (`chi` + `pgx` + `goose`). Reemplazó a la versión
+anterior en Python (FastAPI + SQLAlchemy) conservando el mismo dominio y **los
+mismos endpoints**, así que `frontend/lib/infrastructure/datasources/api_datasource.dart`
+(que apunta a `http://localhost:8000`) no necesita cambios.
 
-### 1. Crear ApiDatasource
-
-```dart
-// lib/infrastructure/datasources/api_datasource.dart
-class ApiDatasource {
-  ApiDatasource({required this.baseUrl, required this.token});
-  final String baseUrl;
-  final String token;
-
-  Future<List<Map<String, dynamic>>> getAlumnos() async {
-    final res = await http.get(
-      Uri.parse('$baseUrl/alumnos'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-    return (jsonDecode(res.body) as List).cast<Map<String, dynamic>>();
-  }
-  // ... mismo patrón para cada endpoint
-}
+```bash
+cd backend
+go mod tidy
+go run ./cmd/api migrate up   # esquema (idempotente)
+go run ./cmd/api              # servidor en http://localhost:8000
 ```
 
-### 2. Reemplazar MockDatasource en los repository_impl
-
-```dart
-// Antes (mock):
-class AlumnoRepositoryImpl implements AlumnoRepository {
-  AlumnoRepositoryImpl(this._datasource);
-  final MockDatasource _datasource;
-  ...
-}
-
-// Después (API):
-class AlumnoRepositoryImpl implements AlumnoRepository {
-  AlumnoRepositoryImpl(this._datasource);
-  final ApiDatasource _datasource;
-
-  @override
-  Future<List<Alumno>> getAlumnos() async {
-    final raw = await _datasource.getAlumnos();
-    return raw.map(Alumno.fromJson).toList(); // agregar fromJson a la entidad
-  }
-}
-```
-
-### 3. Inyectar en los screens
-
-```dart
-// En el initState de cada screen, cambiar:
-final ds = MockDatasource();
-// por:
-final ds = ApiDatasource(baseUrl: 'https://tu-api.com', token: authToken);
-```
+Ver [`backend/README.md`](backend/README.md) para el detalle de capas, endpoints
+nuevos (login de panel, endpoints del lector ESP32 con API Key, sync del buffer
+offline) y el punto de extensión de autenticación secundaria.
 
 ---
 
