@@ -11,6 +11,7 @@ import '../../domain/entities/class_period.dart';
 import '../../domain/entities/preceptor_assignment.dart';
 import '../../domain/entities/specialty.dart';
 import '../../domain/entities/notification.dart';
+import '../../domain/entities/config.dart';
 
 /// Error de API que expone el mensaje del backend tal cual (para mostrarlo al
 /// usuario, p.ej. "Ya existe un alumno registrado con ese DNI.").
@@ -836,4 +837,202 @@ class ApiDatasource {
         AttendanceStatus.absentWithPresence => 'absent_with_presence',
         AttendanceStatus.nonComputableAbsence => 'non_computable_absence',
       };
+
+  // ══ Configuración (Panel de Dirección) ═════════════════════════════════════
+  // Consume los endpoints /config/* del backend Go. Especialidades, materias y
+  // profesores YA NO se gestionan acá — sus pantallas propias del sidebar
+  // conservan esas rutas de paridad. Los errores llegan como {"detail": "..."}.
+
+  ApiException _detailError(http.Response response, String fallback) {
+    String detail = '';
+    try {
+      detail = (jsonDecode(response.body)['detail'] ?? '').toString();
+    } catch (_) {}
+    return ApiException(detail.isNotEmpty ? detail : fallback);
+  }
+
+  // ── General: alertas + almuerzo (school_settings) ─────────────────────────
+
+  Future<ConfigSchoolSettings> getConfigSchoolSettings() async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/config/school-settings'))
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) throw Exception('Error al obtener la configuración');
+    return ConfigSchoolSettings.fromJson(jsonDecode(response.body));
+  }
+
+  Future<ConfigSchoolSettings> actualizarConfigSchoolSettings(ConfigSchoolSettings settings) async {
+    final response = await http
+        .put(
+          Uri.parse('$baseUrl/config/school-settings'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(settings.toJson()),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) return ConfigSchoolSettings.fromJson(jsonDecode(response.body));
+    throw _detailError(response, 'No se pudo guardar la configuración.');
+  }
+
+  // ── General: turnos (etiqueta editable) ──────────────────────────────────
+
+  Future<List<ShiftConfig>> getShifts() async {
+    final response = await http.get(Uri.parse('$baseUrl/config/shifts')).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) throw Exception('Error al obtener los turnos');
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((j) => ShiftConfig.fromJson(j)).toList();
+  }
+
+  Future<ShiftConfig> renombrarShift(String shift, String label) async {
+    final response = await http
+        .put(
+          Uri.parse('$baseUrl/config/shifts/$shift'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'label': label}),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) return ShiftConfig.fromJson(jsonDecode(response.body));
+    throw _detailError(response, 'No se pudo actualizar el turno.');
+  }
+
+  // ── General: recreos por turno (shift_breaks) ────────────────────────────
+
+  Future<List<ShiftBreak>> getShiftBreaks(String shift) async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/config/shift-breaks').replace(queryParameters: {'shift': shift}))
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) throw Exception('Error al obtener los recreos');
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((j) => ShiftBreak.fromJson(j)).toList();
+  }
+
+  Future<ShiftBreak> crearShiftBreak({
+    required String shift,
+    String? label,
+    required String startTime,
+    required String endTime,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/config/shift-breaks'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'shift': shift,
+            if (label != null && label.isNotEmpty) 'label': label,
+            'start_time': startTime,
+            'end_time': endTime,
+          }),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 201) return ShiftBreak.fromJson(jsonDecode(response.body));
+    throw _detailError(response, 'No se pudo crear el recreo.');
+  }
+
+  Future<void> eliminarShiftBreak(String id) async {
+    final response = await http
+        .delete(Uri.parse('$baseUrl/config/shift-breaks/$id'))
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 204) return;
+    throw _detailError(response, 'No se pudo eliminar el recreo.');
+  }
+
+  // ── Cursos: estructura académica ────────────────────────────────────────
+
+  Future<CoursesStructure> getCoursesStructure() async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/config/courses/structure'))
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) throw Exception('Error al obtener la estructura de cursos');
+    return CoursesStructure.fromJson(jsonDecode(response.body));
+  }
+
+  Future<CoursesStructure> guardarCoursesStructure(CoursesStructure structure) async {
+    final response = await http
+        .put(
+          Uri.parse('$baseUrl/config/courses/structure'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(structure.toJson()),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) return CoursesStructure.fromJson(jsonDecode(response.body));
+    throw _detailError(response, 'No se pudo guardar la estructura.');
+  }
+
+  // ── Dispositivos: puntos de acceso + lectores ───────────────────────────
+
+  Future<List<EntryPoint>> getEntryPoints() async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/config/entry-points'))
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) throw Exception('Error al obtener los puntos de acceso');
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((j) => EntryPoint.fromJson(j)).toList();
+  }
+
+  Future<EntryPoint> crearEntryPoint({required String name, String? location}) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/config/entry-points'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'name': name,
+            if (location != null && location.isNotEmpty) 'location': location,
+          }),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 201) return EntryPoint.fromJson(jsonDecode(response.body));
+    throw _detailError(response, 'No se pudo crear el punto de acceso.');
+  }
+
+  Future<EntryPoint> actualizarEntryPoint({required String id, required String name, String? location}) async {
+    final response = await http
+        .put(
+          Uri.parse('$baseUrl/config/entry-points/$id'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'name': name,
+            if (location != null && location.isNotEmpty) 'location': location,
+          }),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) return EntryPoint.fromJson(jsonDecode(response.body));
+    throw _detailError(response, 'No se pudo actualizar el punto de acceso.');
+  }
+
+  Future<void> eliminarEntryPoint(String id) async {
+    final response = await http
+        .delete(Uri.parse('$baseUrl/config/entry-points/$id'))
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 204) return;
+    throw _detailError(response, 'No se pudo eliminar el punto de acceso.');
+  }
+
+  Future<List<ReaderDevice>> getConfigDevices() async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/config/devices'))
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) throw Exception('Error al obtener los dispositivos');
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((j) => ReaderDevice.fromJson(j)).toList();
+  }
+
+  /// La `apiKey` de la respuesta es lo ÚNICO que no se puede volver a ver.
+  Future<CreatedDevice> crearConfigDevice({required String entryPointId, required String name}) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/config/devices'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'entry_point_id': entryPointId, 'name': name}),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 201) return CreatedDevice.fromJson(jsonDecode(response.body));
+    throw _detailError(response, 'No se pudo registrar el dispositivo.');
+  }
+
+  Future<void> revocarConfigDevice(String id) async {
+    final response = await http
+        .post(Uri.parse('$baseUrl/config/devices/$id/revoke'))
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 204) return;
+    throw _detailError(response, 'No se pudo revocar el dispositivo.');
+  }
 }

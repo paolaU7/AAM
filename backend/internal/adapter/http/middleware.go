@@ -66,6 +66,19 @@ func (s *Server) requireSession(next http.Handler) http.Handler {
 	})
 }
 
+// requirePrincipal is the placeholder gate for the Dirección → Configuración
+// routes. In the product these are dirección-only, but the Flutter panel has no
+// login flow yet, so — like the parity routes — this currently lets every
+// request through. It exists as a single named seam: once panel auth ships,
+// change the body to
+//
+//	return s.requireSession(s.requireRole(domain.RolPrincipal)(next))
+//
+// and every /config route is closed off at once.
+func (s *Server) requirePrincipal(next http.Handler) http.Handler {
+	return next
+}
+
 // requireRole builds a middleware that enforces one of the given roles. Compose
 // after requireSession.
 func (s *Server) requireRole(roles ...domain.RolUsuario) func(http.Handler) http.Handler {

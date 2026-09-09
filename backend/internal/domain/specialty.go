@@ -8,22 +8,32 @@ type Specialty struct {
 	IsBasicCycle bool
 }
 
-// SchoolSettings is the single configuration row: ceilings for the course
-// creation dropdowns plus the thresholds used by the notification bell.
+// SchoolSettings is the single school_settings row. `MaxGradeYear` (how many
+// grade years exist) and `CurrentAcademicYear` are edited from Configuración →
+// Cursos; the lunch window and the alert thresholds from Configuración →
+// General. Per-year division counts live in year_structure, not here.
 type SchoolSettings struct {
-	MaxGradeYear                      int
-	MaxDivision                       int
+	MaxGradeYear        int
+	CurrentAcademicYear int
+	// Lunch window ("HH:MM"). Not a shift break, not enforced by any trigger —
+	// just data the course-schedule builder uses to place the lunch period.
+	LunchStart            string
+	LunchStartFifthModule string
+	LunchEnd              string
+
 	ConsecutiveAbsencesAlertThreshold int
 	PreceptorTempAssignmentAlertDays  int
 	ScheduleExceptionAlertDays        int
 }
 
-// DefaultSchoolSettings is the safety-net used when the seeded row is missing,
-// matching SchoolSettingsRepositoryImpl.get() in the Python backend.
+// DefaultSchoolSettings is the safety-net used when the seeded row is missing.
 func DefaultSchoolSettings() SchoolSettings {
 	return SchoolSettings{
 		MaxGradeYear:                      7,
-		MaxDivision:                       4,
+		CurrentAcademicYear:               2026,
+		LunchStart:                        "11:50",
+		LunchStartFifthModule:             "12:50",
+		LunchEnd:                          "13:10",
 		ConsecutiveAbsencesAlertThreshold: 3,
 		PreceptorTempAssignmentAlertDays:  2,
 		ScheduleExceptionAlertDays:        2,

@@ -164,6 +164,121 @@ type schoolSettingsDTO struct {
 	MaxDivision  int `json:"max_division"`
 }
 
+// ── config → General: school settings (alerts + lunch window) ───────────────
+
+type configSchoolSettingsDTO struct {
+	LunchStart                        string `json:"lunch_start"`
+	LunchStartFifthModule             string `json:"lunch_start_fifth_module"`
+	LunchEnd                          string `json:"lunch_end"`
+	ConsecutiveAbsencesAlertThreshold int    `json:"consecutive_absences_alert_threshold"`
+	PreceptorTempAssignmentAlertDays  int    `json:"preceptor_temp_assignment_alert_days"`
+	ScheduleExceptionAlertDays        int    `json:"schedule_exception_alert_days"`
+}
+
+func toConfigSchoolSettingsDTO(s domain.SchoolSettings) configSchoolSettingsDTO {
+	return configSchoolSettingsDTO{
+		LunchStart:                        s.LunchStart,
+		LunchStartFifthModule:             s.LunchStartFifthModule,
+		LunchEnd:                          s.LunchEnd,
+		ConsecutiveAbsencesAlertThreshold: s.ConsecutiveAbsencesAlertThreshold,
+		PreceptorTempAssignmentAlertDays:  s.PreceptorTempAssignmentAlertDays,
+		ScheduleExceptionAlertDays:        s.ScheduleExceptionAlertDays,
+	}
+}
+
+// ── config → General: shift labels + shift breaks ──────────────────────────
+
+type shiftConfigDTO struct {
+	Shift string `json:"shift"`
+	Label string `json:"label"`
+}
+
+func toShiftConfigDTO(s domain.ShiftConfig) shiftConfigDTO { return shiftConfigDTO{s.Shift, s.Label} }
+
+type shiftBreakDTO struct {
+	ID        string `json:"id"`
+	Shift     string `json:"shift"`
+	Label     string `json:"label"`
+	StartTime string `json:"start_time"`
+	EndTime   string `json:"end_time"`
+}
+
+func toShiftBreakDTO(b domain.ShiftBreak) shiftBreakDTO {
+	return shiftBreakDTO{b.ID, b.Shift, b.Label, b.StartTime, b.EndTime}
+}
+
+// ── config → Cursos: academic structure ───────────────────────────────────
+
+type divisionStructureDTO struct {
+	Division           int `json:"division"`
+	WorkshopGroupCount int `json:"workshop_group_count"`
+}
+
+type yearStructureDTO struct {
+	GradeYear     int                    `json:"grade_year"`
+	DivisionCount int                    `json:"division_count"`
+	Divisions     []divisionStructureDTO `json:"divisions"`
+}
+
+type coursesStructureDTO struct {
+	CurrentAcademicYear int                `json:"current_academic_year"`
+	MaxGradeYear        int                `json:"max_grade_year"`
+	Years               []yearStructureDTO `json:"years"`
+}
+
+func toCoursesStructureDTO(s domain.CoursesStructure) coursesStructureDTO {
+	return coursesStructureDTO{
+		CurrentAcademicYear: s.CurrentAcademicYear,
+		MaxGradeYear:        s.MaxGradeYear,
+		Years: mapList(s.Years, func(y domain.YearDivisionStructure) yearStructureDTO {
+			return yearStructureDTO{
+				GradeYear:     y.GradeYear,
+				DivisionCount: y.DivisionCount,
+				Divisions: mapList(y.Divisions, func(d domain.DivisionStructure) divisionStructureDTO {
+					return divisionStructureDTO{d.Division, d.WorkshopGroupCount}
+				}),
+			}
+		}),
+	}
+}
+
+// ── config: entry points + devices ─────────────────────────────────────────
+
+type entryPointDTO struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Location  *string   `json:"location"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func toEntryPointDTO(e domain.EntryPoint) entryPointDTO {
+	return entryPointDTO{e.ID, e.Name, e.Location, e.CreatedAt}
+}
+
+type deviceConfigDTO struct {
+	ID             string     `json:"id"`
+	EntryPointID   string     `json:"entry_point_id"`
+	EntryPointName string     `json:"entry_point_name"`
+	Name           string     `json:"name"`
+	IsActive       bool       `json:"is_active"`
+	CreatedAt      time.Time  `json:"created_at"`
+	RevokedAt      *time.Time `json:"revoked_at"`
+}
+
+func toDeviceConfigDTO(d domain.DeviceConfig) deviceConfigDTO {
+	return deviceConfigDTO{d.ID, d.EntryPointID, d.EntryPointName, d.Name, d.IsActive, d.CreatedAt, d.RevokedAt}
+}
+
+// deviceCreatedDTO is the create response — the ONLY time api_key is returned.
+type deviceCreatedDTO struct {
+	deviceConfigDTO
+	APIKey string `json:"api_key"`
+}
+
+func toDeviceCreatedDTO(d domain.DeviceCreated) deviceCreatedDTO {
+	return deviceCreatedDTO{toDeviceConfigDTO(d.DeviceConfig), d.APIKey}
+}
+
 type notificationDTO struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`

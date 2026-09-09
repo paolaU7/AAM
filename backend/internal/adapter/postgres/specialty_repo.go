@@ -45,20 +45,28 @@ type SchoolSettingsRepo struct{ pool *pgxpool.Pool }
 
 func NewSchoolSettingsRepo(pool *pgxpool.Pool) *SchoolSettingsRepo { return &SchoolSettingsRepo{pool} }
 
-// Get returns the single settings row, or safe defaults when the seeded row is
-// missing (mirrors SchoolSettingsRepositoryImpl.get()).
-func (r *SchoolSettingsRepo) Get(ctx context.Context) (domain.SchoolSettings, error) {
+const schoolSettingsCols = `
+	max_grade_year, current_academic_year,
+	to_char(lunch_start, 'HH24:MI'),
+	to_char(lunch_start_fifth_module, 'HH24:MI'),
+	to_char(lunch_end, 'HH24:MI'),
+	consecutive_absences_alert_threshold,
+	preceptor_temp_assignment_alert_days,
+	schedule_exception_alert_days`
+
+func scanSchoolSettings(row interface{ Scan(...any) error }) (domain.SchoolSettings, error) {
 	var s domain.SchoolSettings
-	err := r.pool.QueryRow(ctx, `
-		SELECT max_grade_year, max_division,
-		       consecutive_absences_alert_threshold,
-		       preceptor_temp_assignment_alert_days,
-		       schedule_exception_alert_days
-		FROM school_settings LIMIT 1`).
-		Scan(&s.MaxGradeYear, &s.MaxDivision,
-			&s.ConsecutiveAbsencesAlertThreshold,
-			&s.PreceptorTempAssignmentAlertDays,
-			&s.ScheduleExceptionAlertDays)
+	err := row.Scan(&s.MaxGradeYear, &s.CurrentAcademicYear,
+		&s.LunchStart, &s.LunchStartFifthModule, &s.LunchEnd,
+		&s.ConsecutiveAbsencesAlertThreshold,
+		&s.PreceptorTempAssignmentAlertDays,
+		&s.ScheduleExceptionAlertDays)
+	return s, err
+}
+
+// Get returns the single settings row, or safe defaults when it is missing.
+func (r *SchoolSettingsRepo) Get(ctx context.Context) (domain.SchoolSettings, error) {
+	s, err := scanSchoolSettings(r.pool.QueryRow(ctx, `SELECT `+schoolSettingsCols+` FROM school_settings LIMIT 1`))
 	if noRows(err) {
 		return domain.DefaultSchoolSettings(), nil
 	}
@@ -66,4 +74,36 @@ func (r *SchoolSettingsRepo) Get(ctx context.Context) (domain.SchoolSettings, er
 		return domain.SchoolSettings{}, err
 	}
 	return s, nil
+}
+
+// Update writes the singleton row (id = TRUE). Range checks happen in the app
+// layer; the schema CHECKs are the backstop (surface as 400 via mapDBError).
+func (r *SchoolSettingsRepo) Update(ctx context.Context, s domain.SchoolSettings) (domain.SchoolSettings, error) {
+	out, err := scanSchoolSettings(r.pool.QueryRow(ctx, `
+		INSERT INTO school_settings (
+			id, max_grade_year, current_academic_year,
+			lunch_start, lunch_start_fifth_module, lunch_end,
+			consecutive_absences_alert_threshold,
+			preceptor_temp_assignment_alert_days,
+			schedule_exception_alert_days
+		) VALUES (TRUE, $1, $2, $3::time, $4::time, $5::time, $6, $7, $8)
+		ON CONFLICT (id) DO UPDATE SET
+			max_grade_year = EXCLUDED.max_grade_year,
+			current_academic_year = EXCLUDED.current_academic_year,
+			lunch_start = EXCLUDED.lunch_start,
+			lunch_start_fifth_module = EXCLUDED.lunch_start_fifth_module,
+			lunch_end = EXCLUDED.lunch_end,
+			consecutive_absences_alert_threshold = EXCLUDED.consecutive_absences_alert_threshold,
+			preceptor_temp_assignment_alert_days = EXCLUDED.preceptor_temp_assignment_alert_days,
+			schedule_exception_alert_days = EXCLUDED.schedule_exception_alert_days
+		RETURNING `+schoolSettingsCols,
+		s.MaxGradeYear, s.CurrentAcademicYear,
+		s.LunchStart, s.LunchStartFifthModule, s.LunchEnd,
+		s.ConsecutiveAbsencesAlertThreshold,
+		s.PreceptorTempAssignmentAlertDays,
+		s.ScheduleExceptionAlertDays))
+	if err != nil {
+		return domain.SchoolSettings{}, mapDBError(err, "No se pudo actualizar la configuración.")
+	}
+	return out, nil
 }

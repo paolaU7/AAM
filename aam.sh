@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================================
 #  aam — Scripts de desarrollo para el proyecto AAM
+#
+#  Stack:
+#    reader/    Firmware C++ (framework Arduino) para ESP32 + PN532 — PlatformIO
+#    backend/   Go + chi (router liviano) + PostgreSQL (pgx) + goose (migraciones)
+#    frontend/  Flutter (Dart), móvil para preceptores y web/escritorio para dirección
 # =============================================================================
 
 set -euo pipefail
@@ -15,8 +20,24 @@ RESET='\033[0m'
 
 SCRIPT_NAME="aam"
 
-# ── Detectar raíz del repo ──────────────────────────────────────────────────
-PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+# ── Raíz del repo ───────────────────────────────────────────────────────────
+# aam.sh vive en la raíz del repo, así que la ubicación del script es la fuente
+# de verdad (más confiable que `git rev-parse` cuando hay repos anidados).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
+
+BACKEND_DIR="$PROJECT_ROOT/backend"
+FRONTEND_DIR="$PROJECT_ROOT/frontend"
+READER_DIR="$PROJECT_ROOT/reader"
+
+# ── Asegurar Go en el PATH ─────────────────────────────────────────────────
+# Git Bash no siempre hereda el PATH de Go; lo agregamos si hace falta.
+if ! command -v go &>/dev/null; then
+    for _godir in "/c/Program Files/Go/bin" "/c/Go/bin" "$HOME/go/bin"; do
+        [ -x "$_godir/go.exe" ] || [ -x "$_godir/go" ] && PATH="$PATH:$_godir"
+    done
+    export PATH
+fi
 
 # =============================================================================
 # UTILIDADES
@@ -27,8 +48,18 @@ warn()   { echo -e "${YELLOW}⚠${RESET}  $*"; }
 error()  { echo -e "${RED}✖${RESET}  $*" >&2; }
 header() { echo -e "\n${BOLD}${CYAN}══ $* ══${RESET}\n"; }
 
+have() { command -v "$1" &>/dev/null; }
+
+# PlatformIO se instala como `pio` o `platformio`.
+pio_bin() {
+    if have pio; then echo "pio"
+    elif have platformio; then echo "platformio"
+    else return 1
+    fi
+}
+
 require_git_repo() {
-    if [ -z "$PROJECT_ROOT" ]; then
+    if ! git -C "$PROJECT_ROOT" rev-parse --show-toplevel &>/dev/null; then
         error "No es un repositorio Git."
         exit 1
     fi
@@ -46,55 +77,60 @@ require_changes() {
 }
 
 # =============================================================================
-# BUILD
+# BUILD  (verificación de dependencias + análisis estático)
 # =============================================================================
 
 cmd_build() {
-    require_git_repo
-
     header "AAM — Build completo"
 
     local failed=0
 
-    # Backend
-    log "Backend → verificando dependencias..."
-
-    if [ -d "$PROJECT_ROOT/backend" ]; then
-        cd "$PROJECT_ROOT/backend"
-
-        if command -v go &>/dev/null; then
-            go mod tidy || failed=1
+    # ── Backend (Go) ────────────────────────────────────────────────────────
+    log "Backend → Go..."
+    if [ -d "$BACKEND_DIR" ]; then
+        cd "$BACKEND_DIR"
+        if have go; then
+            go mod tidy   || failed=1
             go build ./... || failed=1
-            go vet ./... || failed=1
+            go vet ./...   || failed=1
         else
-            warn "Go no encontrado."
+            warn "Go no encontrado (instalá Go 1.23+)."
         fi
-
         cd "$PROJECT_ROOT"
     else
         warn "backend/ no encontrado."
     fi
 
-    # Frontend
-    log "Frontend → verificando Flutter..."
-
-    if [ -d "$PROJECT_ROOT/frontend" ]; then
-        cd "$PROJECT_ROOT/frontend"
-
-        if command -v flutter &>/dev/null; then
+    # ── Frontend (Flutter) ─────────────────────────────────────────────────
+    log "Frontend → Flutter..."
+    if [ -d "$FRONTEND_DIR" ]; then
+        cd "$FRONTEND_DIR"
+        if have flutter; then
             flutter pub get || failed=1
             flutter analyze --no-fatal-warnings --no-fatal-infos || failed=1
         else
             warn "Flutter no encontrado."
         fi
-
         cd "$PROJECT_ROOT"
     else
         warn "frontend/ no encontrado."
     fi
 
-    echo ""
+    # ── Reader (ESP32 / PlatformIO) ────────────────────────────────────────
+    log "Reader → PlatformIO..."
+    if [ -d "$READER_DIR" ]; then
+        cd "$READER_DIR"
+        if PIO="$(pio_bin)"; then
+            "$PIO" run || failed=1
+        else
+            warn "PlatformIO no encontrado (pip install platformio) — se omite el firmware."
+        fi
+        cd "$PROJECT_ROOT"
+    else
+        warn "reader/ no encontrado."
+    fi
 
+    echo ""
     if [ "$failed" -eq 0 ]; then
         echo -e "${GREEN}${BOLD}✔ Build OK${RESET}"
     else
@@ -104,70 +140,178 @@ cmd_build() {
 }
 
 # =============================================================================
+# TEST
+# =============================================================================
+
+cmd_test() {
+    header "AAM — Tests"
+
+    local failed=0
+
+    if [ -d "$BACKEND_DIR" ] && have go; then
+        log "Backend → go test ./..."
+        cd "$BACKEND_DIR"
+        go test ./... || failed=1
+        cd "$PROJECT_ROOT"
+    else
+        warn "Se omiten tests de backend (falta backend/ o Go)."
+    fi
+
+    if [ -d "$FRONTEND_DIR" ] && have flutter; then
+        log "Frontend → flutter test"
+        cd "$FRONTEND_DIR"
+        flutter test || failed=1
+        cd "$PROJECT_ROOT"
+    else
+        warn "Se omiten tests de frontend (falta frontend/ o Flutter)."
+    fi
+
+    echo ""
+    if [ "$failed" -eq 0 ]; then
+        echo -e "${GREEN}${BOLD}✔ Tests OK${RESET}"
+    else
+        echo -e "${RED}${BOLD}✖ Tests con errores${RESET}"
+        exit 1
+    fi
+}
+
+# =============================================================================
+# MIGRACIONES  (goose embebido en el binario de Go)
+# =============================================================================
+
+cmd_migrate() {
+    header "AAM — Migraciones (goose)"
+
+    if [ ! -d "$BACKEND_DIR" ]; then
+        error "backend/ no encontrado."
+        exit 1
+    fi
+    if ! have go; then
+        error "Go no encontrado (instalá Go 1.23+)."
+        exit 1
+    fi
+
+    local sub="${1:-up}"   # up | down | status
+    case "$sub" in
+        up|down|status) ;;
+        *) error "Subcomando inválido: '$sub' (up | down | status)"; exit 1 ;;
+    esac
+
+    cd "$BACKEND_DIR"
+    log "go run ./cmd/api migrate $sub"
+    go run ./cmd/api migrate "$sub"
+}
+
+# =============================================================================
 # RUN BACKEND / FRONTEND / FULL
 # =============================================================================
 
 cmd_run_back() {
-    require_git_repo
-
     header "AAM — Backend"
 
-    if [ -d "$PROJECT_ROOT/backend" ]; then
-        cd "$PROJECT_ROOT/backend"
-        log "Levantando backend en http://localhost:8000 ..."
-        go run ./cmd/api
-    else
+    if [ ! -d "$BACKEND_DIR" ]; then
         warn "backend/ no encontrado."
+        return
     fi
+    if ! have go; then
+        error "Go no encontrado (instalá Go 1.23+)."
+        exit 1
+    fi
+
+    cd "$BACKEND_DIR"
+    log "Aplicando migraciones..."
+    go run ./cmd/api migrate up || warn "Migraciones fallaron (¿PostgreSQL levantado? revisá backend/.env)."
+    log "Levantando backend en http://localhost:8000 ..."
+    go run ./cmd/api
 }
 
 cmd_run_front() {
-    require_git_repo
-
     header "AAM — Frontend"
 
-    if [ -d "$PROJECT_ROOT/frontend" ]; then
-        cd "$PROJECT_ROOT/frontend"
-        log "Levantando frontend..."
-        flutter run -d chrome
-    else
+    if [ ! -d "$FRONTEND_DIR" ]; then
         warn "frontend/ no encontrado."
+        return
     fi
+    if ! have flutter; then
+        error "Flutter no encontrado."
+        exit 1
+    fi
+
+    local device="${1:-chrome}"   # chrome | linux | windows | macos | <id de dispositivo>
+    cd "$FRONTEND_DIR"
+    log "Levantando frontend (-d $device) ..."
+    flutter run -d "$device"
 }
 
 cmd_run() {
-    require_git_repo
-
     header "AAM — Run completo"
 
-    if [ -d "$PROJECT_ROOT/backend" ]; then
+    BACK_PID=""
+    FRONT_PID=""
+
+    cleanup() {
+        [ -n "$BACK_PID" ]  && kill "$BACK_PID"  2>/dev/null || true
+        [ -n "$FRONT_PID" ] && kill "$FRONT_PID" 2>/dev/null || true
+    }
+    trap cleanup EXIT INT TERM
+
+    if [ -d "$BACKEND_DIR" ] && have go; then
+        log "Aplicando migraciones..."
+        ( cd "$BACKEND_DIR" && go run ./cmd/api migrate up ) \
+            || warn "Migraciones fallaron (¿PostgreSQL levantado?)."
         log "Levantando backend..."
-        cd "$PROJECT_ROOT/backend"
-        go run ./cmd/api &
+        ( cd "$BACKEND_DIR" && go run ./cmd/api ) &
         BACK_PID=$!
-        cd "$PROJECT_ROOT"
     else
-        warn "backend/ no encontrado."
-        BACK_PID=""
+        warn "backend/ no se inicia (falta backend/ o Go)."
     fi
 
-    if [ -d "$PROJECT_ROOT/frontend" ]; then
+    if [ -d "$FRONTEND_DIR" ] && have flutter; then
         log "Levantando frontend..."
-        cd "$PROJECT_ROOT/frontend"
-        flutter run -d chrome &
+        ( cd "$FRONTEND_DIR" && flutter run -d chrome ) &
         FRONT_PID=$!
-        cd "$PROJECT_ROOT"
     else
-        warn "frontend/ no encontrado."
-        FRONT_PID=""
+        warn "frontend/ no se inicia (falta frontend/ o Flutter)."
+    fi
+
+    if [ -z "$BACK_PID" ] && [ -z "$FRONT_PID" ]; then
+        error "Nada para ejecutar."
+        exit 1
     fi
 
     echo ""
-    echo -e "${GREEN}${BOLD}✔ Backend y frontend iniciados.${RESET}"
+    echo -e "${GREEN}${BOLD}✔ Servicios iniciados.${RESET}"
     echo -e "${CYAN}Backend PID:${RESET}  ${BACK_PID:-N/A}"
     echo -e "${CYAN}Frontend PID:${RESET} ${FRONT_PID:-N/A}"
 
     wait
+}
+
+# =============================================================================
+# READER  (firmware ESP32 vía PlatformIO)
+# =============================================================================
+
+cmd_reader() {
+    local sub="${1:-build}"   # build | flash | monitor
+    header "AAM — Reader ($sub)"
+
+    if [ ! -d "$READER_DIR" ]; then
+        error "reader/ no encontrado."
+        exit 1
+    fi
+    local PIO
+    if ! PIO="$(pio_bin)"; then
+        error "PlatformIO no encontrado (pip install platformio)."
+        exit 1
+    fi
+
+    cd "$READER_DIR"
+    case "$sub" in
+        build)   "$PIO" run ;;
+        flash)   "$PIO" run --target upload ;;
+        monitor) "$PIO" device monitor ;;
+        *) error "Subcomando inválido: '$sub' (build | flash | monitor)"; exit 1 ;;
+    esac
 }
 
 # =============================================================================
@@ -227,11 +371,16 @@ cmd_help() {
     echo -e "
 ${BOLD}${CYAN}AAM CLI${RESET}
 
-${GREEN}aam build${RESET}       - Ejecuta verificación de dependencias y análisis para backend y frontend
-${GREEN}aam run${RESET}         - Inicia backend y frontend juntos
-${GREEN}aam run-back${RESET}    - Inicia solo el backend
-${GREEN}aam run-front${RESET}   - Inicia solo el frontend
-${GREEN}aam push${RESET}        - Agrega, commitea y sube cambios a una rama existente
+${GREEN}${SCRIPT_NAME} build${RESET}              - Dependencias + análisis estático (backend Go, frontend Flutter, reader PlatformIO)
+${GREEN}${SCRIPT_NAME} test${RESET}               - Corre los tests (go test / flutter test)
+${GREEN}${SCRIPT_NAME} migrate [up|down|status]${RESET}
+                        - Migraciones goose del backend (por defecto: up)
+${GREEN}${SCRIPT_NAME} run${RESET}                - Migra + inicia backend y frontend juntos
+${GREEN}${SCRIPT_NAME} run-back${RESET}           - Migra + inicia solo el backend (http://localhost:8000)
+${GREEN}${SCRIPT_NAME} run-front [device]${RESET} - Inicia solo el frontend (device por defecto: chrome)
+${GREEN}${SCRIPT_NAME} reader [build|flash|monitor]${RESET}
+                        - Firmware del ESP32 vía PlatformIO (por defecto: build)
+${GREEN}${SCRIPT_NAME} push${RESET}               - Agrega, commitea y sube cambios a una rama existente
 "
 }
 
@@ -240,11 +389,14 @@ ${GREEN}aam push${RESET}        - Agrega, commitea y sube cambios a una rama exi
 # =============================================================================
 
 case "${1:-help}" in
-    build) cmd_build ;;
-    run) cmd_run ;;
-    run-back) cmd_run_back ;;
-    run-front) cmd_run_front ;;
-    push) cmd_push ;;
+    build)      cmd_build ;;
+    test)       cmd_test ;;
+    migrate)    shift || true; cmd_migrate "$@" ;;
+    run)        cmd_run ;;
+    run-back)   cmd_run_back ;;
+    run-front)  shift || true; cmd_run_front "$@" ;;
+    reader)     shift || true; cmd_reader "$@" ;;
+    push)       cmd_push ;;
     help|--help|-h) cmd_help ;;
-    *) error "Comando desconocido: ${1:-}" ; cmd_help ;;
+    *) error "Comando desconocido: ${1:-}" ; cmd_help ; exit 1 ;;
 esac

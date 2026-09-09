@@ -459,7 +459,7 @@ class _AlumnoRowState extends State<_AlumnoRow> {
                 CircleAvatar(
                   radius: 16,
                   backgroundColor: AAMColors.mint,
-                  child: Text(a.apellido.substring(0, 1),
+                  child: Text(a.apellido.isNotEmpty ? a.apellido[0] : '?',
                     // AAMColors.mint es un fondo fijo y claro (no sigue el
                     // tema) — el texto tiene que quedar siempre oscuro para
                     // contrastar, en vez de theme.text (que en modo oscuro
@@ -467,16 +467,25 @@ class _AlumnoRowState extends State<_AlumnoRow> {
                     style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: AAMColors.primary)),
                 ),
                 const SizedBox(width: 10),
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(a.nombreCompleto,
-                    style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: widget.theme.text)),
+                // Sin Expanded, un nombre largo desborda la fila (rayas de
+                // overflow). Acotado a una línea con puntos suspensivos; el
+                // nombre completo queda visible en el tooltip al pasar el mouse.
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Tooltip(
+                    message: a.nombreCompleto,
+                    waitDuration: const Duration(milliseconds: 500),
+                    child: Text(a.nombreCompleto,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: widget.theme.text)),
+                  ),
                   if (a.recursante)
-                    Row(children: [
+                    Row(mainAxisSize: MainAxisSize.min, children: [
                       Icon(Icons.repeat_outlined, size: 14, color: AAMColors.accent),
                       const SizedBox(width: 4),
                       Text('Recursante', style: GoogleFonts.dmSans(fontSize: 10, color: AAMColors.accent)),
                     ]),
-                ]),
+                ])),
               ])),
               // Año
               Expanded(flex: 1, child: Text(a.gradeYear > 0 ? gradeYearOrdinal(a.gradeYear) : '—',
@@ -486,6 +495,7 @@ class _AlumnoRowState extends State<_AlumnoRow> {
                 style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.text))),
               // Taller
               Expanded(flex: 1, child: Text(a.taller ?? '—',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
               // DNI
               Expanded(flex: 2, child: Text(a.dniFormateado,
@@ -664,9 +674,12 @@ class _AlumnoDetalleModal extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(alumno.nombreCompleto, style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w700, color: theme.text)),
+                  Text(alumno.nombreCompleto,
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w700, color: theme.text)),
                   const SizedBox(height: 4),
                   Text(alumno.curso,
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
                 ])),
                 GestureDetector(

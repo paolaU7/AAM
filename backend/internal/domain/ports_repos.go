@@ -147,9 +147,10 @@ type SpecialtyRepo interface {
 	GetByID(ctx context.Context, id string) (*Specialty, error)
 }
 
-// SchoolSettingsRepo reads the single `school_settings` row.
+// SchoolSettingsRepo reads and writes the single `school_settings` row.
 type SchoolSettingsRepo interface {
 	Get(ctx context.Context) (SchoolSettings, error)
+	Update(ctx context.Context, s SchoolSettings) (SchoolSettings, error)
 }
 
 // WorkshopGroupRepo persists `workshop_groups`.

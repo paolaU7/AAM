@@ -48,13 +48,21 @@ func (s *Server) listSpecialties(w http.ResponseWriter, r *http.Request) {
 	}))
 }
 
+// getSchoolSettings is the parity route the older course/subject screens still
+// call for dropdown bounds. `max_division` is no longer a real setting — it is
+// derived as the loosest per-year division count from the Cursos structure.
 func (s *Server) getSchoolSettings(w http.ResponseWriter, r *http.Request) {
 	settings, err := s.Specialties.SchoolSettings(r.Context())
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, schoolSettingsDTO{settings.MaxGradeYear, settings.MaxDivision})
+	maxDivision, err := s.CourseStructure.MaxDivision(r.Context())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, schoolSettingsDTO{settings.MaxGradeYear, maxDivision})
 }
 
 func (s *Server) mountNotifications(r chi.Router) {

@@ -9,6 +9,7 @@ import '../screens/materias_screen.dart';
 import '../screens/teachers_screen.dart';
 import '../screens/users_screen.dart';
 import '../screens/reports_screen.dart';
+import '../screens/configuracion_screen.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -41,7 +42,7 @@ class _AppShellState extends State<AppShell> {
     5 => const TeachersScreen(),
     6 => const UsuariosScreen(),
     7 => const ReportesScreen(),
-    8 => const _ConfiguracionPlaceholder(),
+    8 => const ConfiguracionScreen(),
     _ => const DashboardScreen(),
   };
 
@@ -243,18 +244,4 @@ class _NavItem {
   final IconData icon;
   final String label;
   final int index;
-}
-
-class _ConfiguracionPlaceholder extends StatelessWidget {
-  const _ConfiguracionPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(children: [
-      const AAMTopbar(title: 'Configuración'),
-      Expanded(child: Center(child: Text('Próximamente',
-        style: GoogleFonts.dmSans(fontSize: 14, color: AAMColors.textSec),
-      ))),
-    ]);
-  }
 }

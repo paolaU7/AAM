@@ -116,6 +116,11 @@ func buildServer(cfg config.Config, p *pgxpool.Pool) *httpadapter.Server {
 	deviceRepo := postgres.NewDeviceRepo(p)
 	deviceSyncRepo := postgres.NewDeviceSyncRepo(p)
 	overlap := postgres.NewOverlapDetector(p)
+	entryPointRepo := postgres.NewEntryPointRepo(p)
+	deviceConfigRepo := postgres.NewDeviceConfigRepo(p)
+	shiftConfigRepo := postgres.NewShiftConfigRepo(p)
+	shiftBreakRepo := postgres.NewShiftBreakRepo(p)
+	courseStructureRepo := postgres.NewCourseStructureRepo(p)
 
 	// auth adapters
 	hasher := auth.BcryptHasher{}
@@ -144,5 +149,11 @@ func buildServer(cfg config.Config, p *pgxpool.Pool) *httpadapter.Server {
 		Devices:       deviceRepo,
 		SecondaryAuth: secondary,
 		Tokens:        tokens,
+
+		SchoolSettings:  app.SchoolSettingsService{Repo: settingsRepo},
+		Shifts:          app.ShiftConfigService{Repo: shiftConfigRepo},
+		ShiftBreaks:     app.ShiftBreakService{Repo: shiftBreakRepo},
+		CourseStructure: app.CourseStructureService{Repo: courseStructureRepo},
+		DeviceConfig:    app.DeviceConfigService{EntryPoints: entryPointRepo, Devices: deviceConfigRepo},
 	}
 }

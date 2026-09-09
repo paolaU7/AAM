@@ -7,6 +7,7 @@ import '../../domain/entities/class_period.dart';
 import '../../domain/entities/academic.dart';
 import '../../domain/entities/preceptor_assignment.dart';
 import '../../domain/entities/specialty.dart';
+import '../../domain/entities/config.dart';
 import '../../domain/entities/user.dart';
 import '../../infrastructure/datasources/api_datasource.dart';
 import '../../infrastructure/repositories/course_repository_impl.dart';
@@ -371,7 +372,7 @@ class _CursoFormState extends State<_CursoForm> {
   Specialty? _especialidadSel;
 
   List<Specialty> _especialidades = [];
-  SchoolSettings? _settings;
+  CoursesStructure? _structure;
   bool _catalogosLoading = true;
   bool _submitting = false;
   String? _error;
@@ -396,12 +397,14 @@ class _CursoFormState extends State<_CursoForm> {
   Future<void> _cargarCatalogos() async {
     setState(() => _catalogosLoading = true);
     try {
-      final results = await Future.wait([widget.ds.getSpecialties(), widget.ds.getSchoolSettings()]);
+      final results = await Future.wait([widget.ds.getSpecialties(), widget.ds.getCoursesStructure()]);
       if (!mounted) return;
       setState(() {
         _especialidades = results[0] as List<Specialty>;
-        _settings = results[1] as SchoolSettings;
-        if (widget.curso != null) {
+        _structure = results[1] as CoursesStructure;
+        if (widget.curso == null) {
+          _anioLectivoCtrl.text = '${_structure!.currentAcademicYear}';
+        } else {
           try {
             _especialidadSel = _especialidades.firstWhere((s) => s.id == widget.curso!.specialtyId);
           } catch (_) {}
@@ -428,9 +431,21 @@ class _CursoFormState extends State<_CursoForm> {
 
   List<Specialty> get _especialidadesElegibles => _especialidades.where((s) => !s.isBasicCycle).toList();
 
+  // Divisiones habilitadas para el año elegido, según la estructura configurada
+  // en Configuración → Cursos. Sin año elegido: vacío. Año fuera de la
+  // estructura (curso viejo en edición): al menos su división actual.
+  int _divisionCountFor(int? gradeYear) {
+    if (gradeYear == null) return 0;
+    for (final y in _structure?.years ?? const []) {
+      if (y.gradeYear == gradeYear) return y.divisionCount;
+    }
+    return _division ?? 1;
+  }
+
   void _onGradeYearChanged(int? v) {
     setState(() {
       _gradeYear = v;
+      if (_division != null && _division! > _divisionCountFor(v)) _division = null;
       if (_esCicloBasico) {
         _especialidadSel = _cicloBasico;
       } else if (_especialidadSel?.isBasicCycle == true) {
@@ -492,8 +507,8 @@ class _CursoFormState extends State<_CursoForm> {
     if (_catalogosLoading) {
       return const Dialog(backgroundColor: Colors.transparent, child: Padding(padding: EdgeInsets.all(40), child: AAMLoadingScreen()));
     }
-    final maxGradeYear = _settings?.maxGradeYear ?? 7;
-    final maxDivision = _settings?.maxDivision ?? 4;
+    final maxGradeYear = _structure?.maxGradeYear ?? 7;
+    final divisionCount = _divisionCountFor(_gradeYear);
     return AAMFormDialog(
       theme: theme,
       icon: Icons.school_outlined,
@@ -521,10 +536,10 @@ class _CursoFormState extends State<_CursoForm> {
         AAMLabeledDropdown<int>(
           label: 'División',
           value: _division,
-          options: List.generate(maxDivision, (i) => i + 1),
-          hint: 'División',
+          options: List.generate(divisionCount, (i) => i + 1),
+          hint: _gradeYear == null ? 'Elegí primero el año' : 'División',
           itemLabel: divisionOrdinal,
-          onChanged: (v) => setState(() => _division = v),
+          onChanged: _gradeYear == null ? null : (v) => setState(() => _division = v),
         ),
         const SizedBox(height: 16),
         if (_esCicloBasico)
