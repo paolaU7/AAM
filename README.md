@@ -1,110 +1,75 @@
-# AAM — Panel Directivo (Arquitectura Hexagonal)
+# AAM (Automatic Attendance Manager)
 
-## Estructura completa
+Sistema de asistencia por NFC diseñado bajo Arquitectura Hexagonal y principios SOLID. 
+El proyecto se compone de tres piezas principales: Lector NFC (ESP32), Backend (Go) y Panel Directivo (Flutter).
 
-```
-lib/
-├── main.dart                                    ← Entry point, MaterialApp
-│
-├── domain/                                      ← NÚCLEO — cero dependencias externas
-│   ├── entities/
-│   │   ├── alumno.dart                          ← Alumno, EstadoRegularidad
-│   │   ├── registro_asistencia.dart             ← RegistroAsistencia, MetodoIngreso, EstadoAsistencia
-│   │   ├── usuario.dart                         ← Usuario, RolUsuario, generarUsername()
-│   │   └── curso.dart                           ← Curso, ResumenAsistencia
-│   ├── repositories/                            ← Puertos (interfaces abstractas)
-│   │   ├── alumno_repository.dart
-│   │   ├── asistencia_repository.dart
-│   │   ├── curso_repository.dart
-│   │   └── usuario_repository.dart
-│   └── usecases/                                ← Lógica de negocio
-│       ├── get_resumen_dashboard.dart
-│       ├── get_alumnos.dart                     ← GetAlumnos, GetAlumnosEnRiesgo
-│       ├── get_asistencia_diaria.dart           ← GetAsistenciaDiaria, RegistrarIngresoManual, RegistrarRetiro
-│       └── crear_usuario.dart                   ← CrearUsuario + validación de dominio
-│
-├── infrastructure/                              ← ADAPTADORES — implementan los puertos
-│   ├── datasources/
-│   │   └── mock_datasource.dart                 ← Datos hardcodeados (swap por ApiDatasource)
-│   └── repositories/
-│       ├── alumno_repository_impl.dart
-│       ├── asistencia_repository_impl.dart
-│       ├── curso_repository_impl.dart
-│       └── usuario_repository_impl.dart
-│
-└── presentation/                                ← UI — consume use cases, ignora infra
-    ├── widgets/
-    │   └── aam_design_system.dart               ← AAMColors, AAMButton, AAMBadge, AAMTopbar, etc.
-    ├── shell/
-    │   └── app_shell.dart                       ← Sidebar + navegación principal
-    └── screens/
-        ├── dashboard_screen.dart
-        ├── alumnos_screen.dart
-        ├── asistencia_screen.dart
-        ├── horarios_screen.dart
-        ├── usuarios_screen.dart
-        └── reportes_screen.dart
-```
+## Arquitectura y Componentes
 
----
+### 1. Lector NFC (Firmware ESP32)
+Ubicación: [`reader/`](reader/)
 
-## Setup
+Firmware para ESP32 NodeMCU-32S encargado de leer tags NFC (PN532 vía I2C) y reportar la asistencia.
 
-```bash
-# 1. Copiar toda la estructura a lib/
-# 2. Agregar dependencia
-flutter pub add google_fonts
-flutter pub get
+- **Stack**: C++ / Arduino Framework (PlatformIO).
+- **Características**:
+  - Portal cautivo (`WiFiManager`) para configuración de conectividad.
+  - Generación de identificadores únicos (ULID) nativa.
+  - Sincronización estricta de tiempo UTC vía NTP.
+  - Almacenamiento offline con LittleFS: retiene registros ante fallas de red y los sincroniza automáticamente al reconectar.
+  - Comunicación HTTP con backoff exponencial y soporte de idempotencia (códigos 201/409).
 
-# 3. Correr
-flutter run -d chrome
-```
+### 2. Backend (API REST)
+Ubicación: [`backend/`](backend/)
 
----
+- **Stack**: Go (`chi` para ruteo, `pgx` para PostgreSQL, `goose` para migraciones).
+- **Características**:
+  - Arquitectura Hexagonal estricta (`cmd`, `internal/domain`, `internal/infrastructure`, `internal/app`).
+  - Endpoints de ingesta de datos para hardware con autenticación Bearer (`ApiKey`).
+  - Resolución de conflictos basada en el identificador único de cada registro (ULID) enviado por el hardware.
+  - API REST para el panel directivo.
 
-## Backend (Go)
-
-El backend vive en [`backend/`](backend/) y está escrito en **Go** con
-arquitectura hexagonal (`chi` + `pgx` + `goose`). Reemplazó a la versión
-anterior en Python (FastAPI + SQLAlchemy) conservando el mismo dominio y **los
-mismos endpoints**, así que `frontend/lib/infrastructure/datasources/api_datasource.dart`
-(que apunta a `http://localhost:8000`) no necesita cambios.
-
+Para levantar el entorno:
 ```bash
 cd backend
 go mod tidy
-go run ./cmd/api migrate up   # esquema (idempotente)
-go run ./cmd/api              # servidor en http://localhost:8000
+go run ./cmd/api migrate up
+go run ./cmd/api
 ```
 
-Ver [`backend/README.md`](backend/README.md) para el detalle de capas, endpoints
-nuevos (login de panel, endpoints del lector ESP32 con API Key, sync del buffer
-offline) y el punto de extensión de autenticación secundaria.
+### 3. Panel Directivo (Frontend)
+Ubicación: [`frontend/`](frontend/)
 
----
+- **Stack**: Dart / Flutter.
+- **Características**:
+  - Separación de capas (`domain`, `infrastructure`, `presentation`) manteniendo la lógica agnóstica del framework.
+  - Interfaz para visualización de asistencia, gestión de alumnos y configuración de dispositivos.
+  - Conversión de zonas horarias (de UTC a local) centralizada en la capa de presentación.
 
-## Reglas de arquitectura
+Para levantar el entorno:
+```bash
+cd frontend
+flutter pub get
+flutter run -d chrome
+```
 
-| Capa           | Puede importar       | No puede importar          |
-|----------------|----------------------|----------------------------|
-| `domain`       | Solo Dart puro       | flutter, http, infra, pres |
-| `infrastructure` | `domain`           | `presentation`             |
-| `presentation` | `domain`, `infra`   | Nada externo a la app      |
+## Reglas de Arquitectura
 
----
+Estas restricciones aplican a los tres componentes del sistema (C++, Go y Dart):
 
-## Próximos pasos sugeridos
+| Capa             | Dependencias permitidas         | Dependencias prohibidas                     |
+|------------------|---------------------------------|---------------------------------------------|
+| `domain`         | Código nativo del lenguaje      | Infraestructura, UI, frameworks externos    |
+| `infrastructure` | `domain`, librerías externas    | `presentation`                              |
+| `presentation`   | `domain`, `infrastructure`      | Lógica de negocio, acceso directo a I/O     |
 
-1. Agregar `flutter_riverpod` o `provider` para eliminar la inyección manual en `initState`
-2. Crear `ApiDatasource` que consuma el backend FastAPI
-3. Agregar `fromJson` / `toJson` a las entidades para parsear respuestas HTTP
-4. Agregar autenticación JWT y manejo de sesión
+## Scripts de Utilidad
 
+Se incluye `aam.sh` en la raíz para facilitar operaciones comunes:
 
-# Darle permisos la primera vez
+```bash
 chmod +x aam.sh
-
-./aam.sh build          # compila backend + frontend + firmware
-./aam.sh push-main      # add + commit + push a main
-./aam.sh push-branch    # crea rama, commitea y pushea
-./aam.sh help           # muestra todos los comandos
+./aam.sh build          # Compila backend, frontend y firmware
+./aam.sh push-main      # Add, commit y push a la rama main
+./aam.sh push-branch    # Crea rama, commitea y pushea
+./aam.sh help           # Muestra todos los comandos
+```
