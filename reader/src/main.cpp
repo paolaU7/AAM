@@ -6,6 +6,7 @@
 #include "domain/AttendanceRecord.h"
 #include "adapters/NfcReader.h"
 #include "adapters/EspHttpSyncClient.h"
+#include "adapters/LittleFsBuffer.h"
 #include "utils/UlidGenerator.h"
 #include "utils/TimeProvider.h"
 
@@ -15,6 +16,11 @@
 DeviceConfig       deviceConfig;
 NfcReader          nfcReader;
 EspHttpSyncClient  httpClient;
+LittleFsBuffer     offlineBuffer;
+
+// Intervalo mínimo entre intentos de flush de registros pendientes (ms)
+static constexpr uint32_t FLUSH_INTERVAL_MS = 30000;
+static uint32_t lastFlushAttempt = 0;
 
 #ifndef PIO_UNIT_TESTING
 
@@ -70,7 +76,18 @@ void setup() {
     }
 
     // -----------------------------------------------------------------------
-    // 4. Lector NFC
+    // 4. Buffer offline (LittleFS)
+    //    Debe montarse ANTES del lector NFC para poder guardar registros
+    //    incluso si el backend no está disponible.
+    // -----------------------------------------------------------------------
+    if (!offlineBuffer.begin()) {
+        Serial.println("[Buffer] Error Fatal al montar LittleFS.");
+        // No es fatal: el dispositivo puede funcionar sin buffer,
+        // pero perderá registros si falla la red.
+    }
+
+    // -----------------------------------------------------------------------
+    // 5. Lector NFC
     // -----------------------------------------------------------------------
     if (!nfcReader.begin()) {
         Serial.println("[NFC] Error Fatal: No se detecta el PN532. Revise el cableado I2C.");
@@ -122,13 +139,48 @@ void loop() {
         if (httpClient.syncRecord(record, deviceConfig)) {
             Serial.println("[SYNC] Registro enviado exitosamente.");
         } else {
-            // TODO (Iteración 4): guardar en LittleFS para reintento posterior
-            Serial.println("[SYNC] Fallo al enviar. Registro perdido (sin buffer offline aún).");
+            // Red caída o backend inaccesible → guardar en buffer offline
+            if (offlineBuffer.saveRecord(record)) {
+                Serial.println("[SYNC] Guardado en buffer offline para reintento.");
+            } else {
+                Serial.println("[SYNC] CRÍTICO: No se pudo enviar ni guardar. Registro perdido.");
+            }
         }
         Serial.println("-----------------------------------");
 
         // Pausa para evitar registros duplicados por dejar la tarjeta apoyada
         delay(1500);
+    }
+
+    // -------------------------------------------------------------------
+    // Flush periódico de registros pendientes
+    // Se ejecuta cada FLUSH_INTERVAL_MS si hay WiFi y registros en cola.
+    // -------------------------------------------------------------------
+    if (WiFi.status() == WL_CONNECTED &&
+        millis() - lastFlushAttempt >= FLUSH_INTERVAL_MS &&
+        offlineBuffer.hasPendingRecords()) {
+
+        lastFlushAttempt = millis();
+        Serial.println("[Flush] Intentando enviar registros pendientes...");
+
+        AttendanceRecord pending;
+        uint8_t flushed = 0;
+
+        // Enviar hasta 10 registros por ciclo para no bloquear el loop
+        while (flushed < 10 && offlineBuffer.getNextRecord(pending)) {
+            if (httpClient.syncRecord(pending, deviceConfig)) {
+                offlineBuffer.deleteRecord(pending.recordId);
+                flushed++;
+            } else {
+                // Backend sigue caído, parar el flush hasta el próximo ciclo
+                Serial.println("[Flush] Backend no responde. Reintentando después.");
+                break;
+            }
+        }
+
+        if (flushed > 0) {
+            Serial.printf("[Flush] %d registros sincronizados.\n", flushed);
+        }
     }
 }
 
