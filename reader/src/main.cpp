@@ -5,14 +5,16 @@
 #include "config/DeviceConfig.h"
 #include "domain/AttendanceRecord.h"
 #include "adapters/NfcReader.h"
+#include "adapters/EspHttpSyncClient.h"
 #include "utils/UlidGenerator.h"
 #include "utils/TimeProvider.h"
 
 // ---------------------------------------------------------------------------
 // Variables globales (orquestación)
 // ---------------------------------------------------------------------------
-DeviceConfig deviceConfig;
-NfcReader    nfcReader;
+DeviceConfig       deviceConfig;
+NfcReader          nfcReader;
+EspHttpSyncClient  httpClient;
 
 #ifndef PIO_UNIT_TESTING
 
@@ -109,12 +111,20 @@ void loop() {
         record.deviceId   = deviceConfig.deviceId;
         record.recordedAt = recordedAt;
 
-        // Mostrar registro (próximo paso: enviar al backend / buffer offline)
+        // Log del registro ensamblado
         Serial.println("Registro de Asistencia Ensamblado:");
         Serial.printf("  record_id:   %s\n", record.recordId.c_str());
         Serial.printf("  tag_uid:     %s\n", record.tagUid.c_str());
         Serial.printf("  device_id:   %s\n", record.deviceId.c_str());
         Serial.printf("  recorded_at: %s\n", record.recordedAt.c_str());
+
+        // Enviar al backend
+        if (httpClient.syncRecord(record, deviceConfig)) {
+            Serial.println("[SYNC] Registro enviado exitosamente.");
+        } else {
+            // TODO (Iteración 4): guardar en LittleFS para reintento posterior
+            Serial.println("[SYNC] Fallo al enviar. Registro perdido (sin buffer offline aún).");
+        }
         Serial.println("-----------------------------------");
 
         // Pausa para evitar registros duplicados por dejar la tarjeta apoyada
