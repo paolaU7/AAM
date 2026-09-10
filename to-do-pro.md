@@ -2,7 +2,7 @@ ALUMNOS
 
 -arreglar visual filtros (alto)
 -cuando tocas el ojito de un alumno dice el curso, esta bien, pero tambien debe aclarar la especialidad
--se puede eliminar alumno? consultar con los monos
+-agregar eliminar alumno solo si ya esta dado de baja
 
 ASISTENCIA
 
@@ -10,6 +10,7 @@ ASISTENCIA
 -cuando el nombre de un alumno es muy largo se ve un error amarillo y negro del flutter
 
 CURSOS
+
 -hacer simetricos los espacios de izq y der de los cursos (estan mas a la izq que der ahora)
 -en horario semanal agregar boton de editar y de deshabilitar
 -que cuando agregues muchos horarios en horario semanal solo se ordene con este criterio de prioridad de arriba a abajo: orden semanal (lunes, martes, etc) y horario despues (mañana, tarde, vespertino)
