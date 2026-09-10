@@ -58,6 +58,23 @@ pio_bin() {
     fi
 }
 
+# URL de Supabase para el backend, en este orden:
+#   1) variable de entorno SUPABASE_DATABASE_URL
+#   2) línea SUPABASE_DATABASE_URL=... en backend/.env
+# Vacío si no está configurada o si todavía tiene el placeholder <PROJECT_REF>.
+supabase_db_url() {
+    local url="${SUPABASE_DATABASE_URL:-}"
+    if [ -z "$url" ] && [ -f "$BACKEND_DIR/.env" ]; then
+        url="$(grep -E '^[[:space:]]*SUPABASE_DATABASE_URL[[:space:]]*=' "$BACKEND_DIR/.env" 2>/dev/null | tail -1)"
+        url="${url#*=}"
+        url="$(printf '%s' "$url" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'\'']//' -e 's/["'\'']$//')"
+    fi
+    case "$url" in
+        ""|*"<PROJECT_REF>"*) return 0 ;;
+        *) printf '%s' "$url" ;;
+    esac
+}
+
 require_git_repo() {
     if ! git -C "$PROJECT_ROOT" rev-parse --show-toplevel &>/dev/null; then
         error "No es un repositorio Git."
@@ -219,8 +236,9 @@ cmd_run_back() {
     fi
 
     cd "$BACKEND_DIR"
-    log "Aplicando migraciones..."
-    go run ./cmd/api migrate up || warn "Migraciones fallaron (¿PostgreSQL levantado? revisá backend/.env)."
+    # El esquema se administra a mano con backend/schema.sql (aplicalo en tu
+    # Postgres local o en el SQL Editor de Supabase). Las migraciones goose
+    # quedaron desactualizadas, por eso no se corren solas.
     log "Levantando backend en http://localhost:8000 ..."
     go run ./cmd/api
 }
@@ -256,11 +274,19 @@ cmd_run() {
     trap cleanup EXIT INT TERM
 
     if [ -d "$BACKEND_DIR" ] && have go; then
-        log "Aplicando migraciones..."
-        ( cd "$BACKEND_DIR" && go run ./cmd/api migrate up ) \
-            || warn "Migraciones fallaron (¿PostgreSQL levantado?)."
-        log "Levantando backend..."
-        ( cd "$BACKEND_DIR" && go run ./cmd/api ) &
+        # `aam run` apunta el backend a Supabase. La URL sale de
+        # SUPABASE_DATABASE_URL (variable de entorno o backend/.env).
+        # Esquema: se aplica a mano con backend/schema.sql.
+        local sb_url
+        sb_url="$(supabase_db_url)"
+        if [ -n "$sb_url" ]; then
+            log "Levantando backend → Supabase ..."
+            ( cd "$BACKEND_DIR" && DATABASE_URL="$sb_url" go run ./cmd/api ) &
+        else
+            warn "SUPABASE_DATABASE_URL no configurada en backend/.env — el backend usa DATABASE_URL de .env."
+            log "Levantando backend..."
+            ( cd "$BACKEND_DIR" && go run ./cmd/api ) &
+        fi
         BACK_PID=$!
     else
         warn "backend/ no se inicia (falta backend/ o Go)."
@@ -375,8 +401,8 @@ ${GREEN}${SCRIPT_NAME} build${RESET}              - Dependencias + análisis est
 ${GREEN}${SCRIPT_NAME} test${RESET}               - Corre los tests (go test / flutter test)
 ${GREEN}${SCRIPT_NAME} migrate [up|down|status]${RESET}
                         - Migraciones goose del backend (por defecto: up)
-${GREEN}${SCRIPT_NAME} run${RESET}                - Migra + inicia backend y frontend juntos
-${GREEN}${SCRIPT_NAME} run-back${RESET}           - Migra + inicia solo el backend (http://localhost:8000)
+${GREEN}${SCRIPT_NAME} run${RESET}                - Inicia backend (→ Supabase, ver SUPABASE_DATABASE_URL en backend/.env) y frontend juntos
+${GREEN}${SCRIPT_NAME} run-back${RESET}           - Inicia solo el backend con DATABASE_URL de backend/.env (http://localhost:8000)
 ${GREEN}${SCRIPT_NAME} run-front [device]${RESET} - Inicia solo el frontend (device por defecto: chrome)
 ${GREEN}${SCRIPT_NAME} reader [build|flash|monitor]${RESET}
                         - Firmware del ESP32 vía PlatformIO (por defecto: build)

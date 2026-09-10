@@ -6,19 +6,44 @@ package postgres
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Open builds a pgx connection pool from a DATABASE_URL.
+// Open builds a pgx connection pool from a DATABASE_URL. It works with a local
+// Postgres and with Supabase, smoothing over the two things a raw Supabase
+// connection string trips on:
+//
+//   - Supabase always requires TLS. pgx's default (sslmode=prefer) already
+//     negotiates it, but if the URL explicitly set sslmode=disable we turn TLS
+//     back on so the connection doesn't just fail.
+//   - The Supabase "Transaction" pooler (Supavisor, port 6543) does not keep
+//     per-connection session state, so pgx's default prepared-statement mode
+//     breaks. That connection is switched to the simple protocol. The "Session"
+//     pooler (port 5432) and the direct connection need none of this.
 func Open(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse DATABASE_URL: %w", err)
 	}
+
+	host := cfg.ConnConfig.Host
+	isSupabase := strings.Contains(host, ".supabase.co") || strings.Contains(host, ".supabase.com")
+
+	if isSupabase && cfg.ConnConfig.TLSConfig == nil {
+		cfg.ConnConfig.TLSConfig = &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
+	}
+	if strings.Contains(host, "pooler.supabase.com") && cfg.ConnConfig.Port == 6543 {
+		cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+		cfg.ConnConfig.StatementCacheCapacity = 0
+		cfg.ConnConfig.DescriptionCacheCapacity = 0
+	}
+
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("connect: %w", err)

@@ -62,4 +62,7 @@ IMPLEMENTACIONES
 
 -agregar panel de preceptores
 -en preceptores al preceptor que este a cargo debe dejar marcar como de licencia medica/vacaciones, con un campo de motivo de texto libre y cuanto tiempo se toma de licencia medica(maximo 1 mes, en caso de necesitarse mas se tendra que renovar la licencia medica)
--
+
+BUGS
+
+-el saludo del panel de admin no es dinamico
