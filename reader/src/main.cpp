@@ -18,9 +18,21 @@ NfcReader          nfcReader;
 EspHttpSyncClient  httpClient;
 LittleFsBuffer     offlineBuffer;
 
+// Pin del LED integrado en el ESP32 (NodeMCU-32S usa el 2)
+static constexpr int LED_PIN = 2;
+
 // Intervalo mínimo entre intentos de flush de registros pendientes (ms)
 static constexpr uint32_t FLUSH_INTERVAL_MS = 30000;
 static uint32_t lastFlushAttempt = 0;
+
+void blinkLed(int times) {
+    for (int i = 0; i < times; i++) {
+        digitalWrite(LED_PIN, HIGH);
+        delay(150);
+        digitalWrite(LED_PIN, LOW);
+        if (i < times - 1) delay(150);
+    }
+}
 
 #ifndef PIO_UNIT_TESTING
 
@@ -29,6 +41,9 @@ void setup() {
     while (!Serial) delay(10);
 
     Serial.println("\n=== AAM Firmware: Inicializando ===");
+
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, LOW);
 
     // -----------------------------------------------------------------------
     // 1. Configuración estática del dispositivo
@@ -138,12 +153,15 @@ void loop() {
         // Enviar al backend
         if (httpClient.syncRecord(record, deviceConfig)) {
             Serial.println("[SYNC] Registro enviado exitosamente.");
+            blinkLed(1); // Éxito: 1 parpadeo
         } else {
             // Red caída o backend inaccesible → guardar en buffer offline
             if (offlineBuffer.saveRecord(record)) {
                 Serial.println("[SYNC] Guardado en buffer offline para reintento.");
+                blinkLed(1); // Éxito guardando offline: 1 parpadeo
             } else {
                 Serial.println("[SYNC] CRÍTICO: No se pudo enviar ni guardar. Registro perdido.");
+                blinkLed(3); // Error crítico: 3 parpadeos rápidos
             }
         }
         Serial.println("-----------------------------------");
