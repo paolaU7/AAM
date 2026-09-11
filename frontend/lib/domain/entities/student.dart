@@ -8,6 +8,7 @@ class Student {
     required this.dni,
     required this.cursoId,
     required this.curso,
+    this.especialidad,
     required this.recursante,
     required this.porcentajeAsistencia,
     this.academicYear = 0,
@@ -24,6 +25,7 @@ class Student {
   final String dni;
   final String cursoId;
   final String curso;        // ej. "4to 2da (2026)"
+  final String? especialidad; // nombre de la especialidad del curso
   final bool recursante;
   final double porcentajeAsistencia; // 0.0 – 100.0
   // Dimensiones del curso, separadas del label compuesto `curso` para poder
@@ -64,6 +66,7 @@ class Student {
     String? dni,
     String? cursoId,
     String? curso,
+    String? especialidad,
     bool? recursante,
     double? porcentajeAsistencia,
     int? academicYear,
@@ -81,6 +84,7 @@ class Student {
       dni:                   dni                   ?? this.dni,
       cursoId:               cursoId               ?? this.cursoId,
       curso:                 curso                 ?? this.curso,
+      especialidad:          especialidad          ?? this.especialidad,
       recursante:            recursante            ?? this.recursante,
       porcentajeAsistencia:  porcentajeAsistencia  ?? this.porcentajeAsistencia,
       academicYear:          academicYear          ?? this.academicYear,

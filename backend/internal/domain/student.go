@@ -21,6 +21,7 @@ type Alumno struct {
 	DNI                  string
 	CursoID              string
 	Curso                string
+	Especialidad         string // specialty name of the student's course
 	Recursante           bool
 	PorcentajeAsistencia float64
 	AcademicYear         int

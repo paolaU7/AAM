@@ -294,6 +294,7 @@ type alumnoDTO struct {
 	DNI                  string  `json:"dni"`
 	CursoID              string  `json:"curso_id"`
 	Curso                string  `json:"curso"`
+	Especialidad         string  `json:"especialidad"`
 	Recursante           bool    `json:"recursante"`
 	PorcentajeAsistencia float64 `json:"porcentaje_asistencia"`
 	EstadoRegularidad    string  `json:"estado_regularidad"`
@@ -308,7 +309,7 @@ type alumnoDTO struct {
 func toAlumnoDTO(a domain.Alumno) alumnoDTO {
 	return alumnoDTO{
 		ID: a.ID, Nombre: a.Nombre, Apellido: a.Apellido, NombreCompleto: a.NombreCompleto(),
-		DNI: a.DNI, CursoID: a.CursoID, Curso: a.Curso, Recursante: a.Recursante,
+		DNI: a.DNI, CursoID: a.CursoID, Curso: a.Curso, Especialidad: a.Especialidad, Recursante: a.Recursante,
 		PorcentajeAsistencia: a.PorcentajeAsistencia, EstadoRegularidad: string(a.EstadoRegularidad()),
 		AcademicYear: a.AcademicYear, GradeYear: a.GradeYear, Division: a.Division,
 		IsActive: a.IsActive, WorkshopGroupID: a.WorkshopGroupID, Taller: a.Taller,

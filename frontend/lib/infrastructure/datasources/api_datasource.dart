@@ -574,6 +574,7 @@ class ApiDatasource {
       dni: json['dni'],
       cursoId: json['curso_id'].toString(),
       curso: json['curso'],
+      especialidad: json['especialidad'],
       recursante: json['recursante'] ?? false,
       porcentajeAsistencia: (json['porcentaje_asistencia'] as num).toDouble(),
       academicYear: (json['academic_year'] as num?)?.toInt() ?? 0,

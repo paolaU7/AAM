@@ -719,6 +719,8 @@ class _AlumnoDetalleModal extends StatelessWidget {
               Wrap(spacing: 10, runSpacing: 10, children: [
                 _DetalleChip(label: 'DNI', value: alumno.dniFormateado),
                 _DetalleChip(label: 'Curso', value: alumno.curso),
+                if (alumno.especialidad != null && alumno.especialidad!.isNotEmpty)
+                  _DetalleChip(label: 'Especialidad', value: alumno.especialidad!),
                 if (alumno.taller != null)
                   _DetalleChip(label: 'Taller', value: alumno.taller!, color: AAMColors.accent),
                 _DetalleChip(label: 'Estado', value: estadoLabel, color: estadoColor),
@@ -1354,22 +1356,28 @@ class _FieldGroup extends StatelessWidget {
 }
 
 class _DetalleChip extends StatelessWidget {
-  const _DetalleChip({required this.label, required this.value, this.color = AAMColors.border});
+  const _DetalleChip({required this.label, required this.value, this.color});
+
   final String label;
   final String value;
-  final Color color;
+  /// Color de acento del chip. Si es null, el chip es neutro y sigue el tema
+  /// (el default anterior, AAMColors.border, dejaba la etiqueta casi blanca
+  /// e ilegible en modo claro).
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final theme = AAMTheme();
+    final labelColor = color ?? theme.textSec;
+    final bg = (color ?? theme.textSec).withAlpha((0.12 * 255).round());
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withAlpha((0.12 * 255).round()),
+        color: bg,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Text('$label: ', style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+        Text('$label: ', style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: labelColor)),
         Text(value, style: GoogleFonts.dmSans(fontSize: 12, color: theme.text)),
       ]),
     );

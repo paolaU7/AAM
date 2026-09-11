@@ -16,17 +16,18 @@ const studentSelect = `
 	SELECT s.id, s.first_name, s.last_name, COALESCE(s.document_number, ''),
 	       s.course_id, s.is_repeating_student, s.is_active, s.workshop_group_id,
 	       COALESCE(c.academic_year, 0), COALESCE(c.grade_year, 0), COALESCE(c.division, 0),
-	       wg.group_label
+	       wg.group_label, COALESCE(sp.name, '')
 	FROM students s
 	LEFT JOIN courses c ON c.id = s.course_id
-	LEFT JOIN workshop_groups wg ON wg.id = s.workshop_group_id`
+	LEFT JOIN workshop_groups wg ON wg.id = s.workshop_group_id
+	LEFT JOIN specialties sp ON sp.id = c.specialty_id`
 
 func scanAlumno(row pgx.Row) (domain.Alumno, error) {
 	var a domain.Alumno
 	var wgID, taller *string
 	if err := row.Scan(
 		&a.ID, &a.Nombre, &a.Apellido, &a.DNI, &a.CursoID, &a.Recursante, &a.IsActive, &wgID,
-		&a.AcademicYear, &a.GradeYear, &a.Division, &taller,
+		&a.AcademicYear, &a.GradeYear, &a.Division, &taller, &a.Especialidad,
 	); err != nil {
 		return domain.Alumno{}, err
 	}
