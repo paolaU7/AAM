@@ -353,17 +353,20 @@ class _AlumnosScreenState extends State<AlumnosScreen> with AutoRefreshMixin<Alu
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(children: [
-        const AAMTableHeader(columns: [
-          ('Alumno',       3),
-          ('Año',          1),
-          ('División',     1),
-          ('Taller',       1),
-          ('DNI',          2),
-          ('Asistencia',   2),
-          ('Estado',       2),
-          ('Activo',       1),
-          ('',             3),
-        ]),
+        const AAMTableHeader(
+          columns: [
+            ('Alumno',       3),
+            ('Año',          1),
+            ('División',     1),
+            ('Taller',       1),
+            ('DNI',          2),
+            ('Asistencia',   2),
+            ('Estado',       2),
+            ('Activo',       1),
+            ('',             3),
+          ],
+          centeredColumns: {5, 6},
+        ),
         Expanded(
           child: alumnos.isEmpty
               ? Center(child: Column(
@@ -499,8 +502,8 @@ class _AlumnoRowState extends State<_AlumnoRow> {
               // DNI
               Expanded(flex: 2, child: Text(a.dniFormateado,
                 style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
-              // Asistencia
-              Expanded(flex: 2, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              // Asistencia — centrada (coincide con el header centrado)
+              Expanded(flex: 2, child: Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
                 Text('${a.porcentajeAsistencia.toStringAsFixed(1)}%',
                   style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: _asistColor)),
                 const SizedBox(height: 4),
@@ -515,10 +518,9 @@ class _AlumnoRowState extends State<_AlumnoRow> {
                 ),
               ])),
               // Estado (regularidad) — Align para que la píldora no se estire
-              // a todo el ancho de la columna (si no, dos badges anchas
-              // pegadas parecen superpuestas).
+              // a todo el ancho de la columna; centrada en la columna.
               Expanded(flex: 2, child: Align(
-                alignment: Alignment.centerLeft,
+                alignment: Alignment.center,
                 child: AAMBadge(label: estadoLabel, color: estadoColor),
               )),
               // Activo (baja lógica)

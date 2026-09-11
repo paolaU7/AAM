@@ -306,8 +306,11 @@ class AAMErrorWidget extends StatelessWidget {
 
 // ─── Tabla header helper ──────────────────────────────────────────────────────
 class AAMTableHeader extends StatelessWidget {
-  const AAMTableHeader({super.key, required this.columns});
+  const AAMTableHeader({super.key, required this.columns, this.centeredColumns = const <int>{}});
   final List<(String label, int flex)> columns;
+  /// Índices de columnas cuyo label va centrado (para que coincida con celdas
+  /// centradas en esa tabla). Por defecto todas van a la izquierda.
+  final Set<int> centeredColumns;
 
   @override
   Widget build(BuildContext context) {
@@ -321,16 +324,20 @@ class AAMTableHeader extends StatelessWidget {
             border: Border(bottom: BorderSide(color: theme.borderCol, width: 1)),
           ),
           child: Row(
-            children: columns.map((c) => Expanded(
-              flex: c.$2,
-              child: Text(
-                c.$1,
-                style: GoogleFonts.dmSans(
-                  fontSize: 11, fontWeight: FontWeight.w600,
-                  color: theme.textSec, letterSpacing: 0.5,
+            children: [
+              for (var i = 0; i < columns.length; i++)
+                Expanded(
+                  flex: columns[i].$2,
+                  child: Text(
+                    columns[i].$1,
+                    textAlign: centeredColumns.contains(i) ? TextAlign.center : TextAlign.start,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 11, fontWeight: FontWeight.w600,
+                      color: theme.textSec, letterSpacing: 0.5,
+                    ),
+                  ),
                 ),
-              ),
-            )).toList(),
+            ],
           ),
         );
       },
