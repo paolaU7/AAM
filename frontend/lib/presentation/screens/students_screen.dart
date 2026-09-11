@@ -10,6 +10,10 @@ import '../../infrastructure/repositories/student_repository_impl.dart';
 import '../widgets/aam_design_system.dart';
 import '../widgets/auto_refresh_mixin.dart';
 
+// Altura común del buscador y de cada caja de filtro, para que queden
+// alineados. Los dropdowns van con isDense para entrar en esta altura.
+const double _kFiltroAltura = 40;
+
 class AlumnosScreen extends StatefulWidget {
   const AlumnosScreen({super.key});
 
@@ -197,90 +201,70 @@ class _AlumnosScreenState extends State<AlumnosScreen> with AutoRefreshMixin<Alu
     int filtered,
     AAMTheme theme,
   ) {
+    // Todo en una fila. El buscador se estira (Expanded); los demás filtros
+    // van a la derecha con ancho propio. Todas las cajas comparten la misma
+    // altura (_kFiltroAltura) para quedar alineadas.
     return Row(children: [
       Expanded(
-        child: Container(
-          height: 42,
-          decoration: BoxDecoration(
-            color: theme.card,
-            border: Border.all(color: theme.borderCol),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: TextField(
-            onChanged: (v) => setState(() => _searchQuery = v),
-            style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
-            decoration: InputDecoration(
-              hintText: 'Buscar por nombre, DNI o curso...',
-              hintStyle: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec),
-              prefixIcon: Icon(Icons.search, size: 18, color: theme.textSec),
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        child: SizedBox(
+          height: _kFiltroAltura,
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: theme.card,
+              border: Border.all(color: theme.borderCol),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: TextField(
+              onChanged: (v) => setState(() => _searchQuery = v),
+              textAlignVertical: TextAlignVertical.center,
+              style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
+              decoration: InputDecoration(
+                isCollapsed: true,
+                hintText: 'Buscar por nombre, DNI o curso...',
+                hintStyle: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec),
+                prefixIcon: Icon(Icons.search, size: 18, color: theme.textSec),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+              ),
             ),
           ),
         ),
       ),
       const SizedBox(width: 12),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: theme.card,
-          border: Border.all(color: theme.borderCol),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: AAMDropdown<int?>(
-          value: _filterAnio,
-          options: <int?>[null, ...aniosOpts],
-          itemLabel: (a) => a == null ? 'Año: todos' : gradeYearOrdinal(a),
-          fontSize: 13,
-          onChanged: (v) => setState(() => _filterAnio = v),
-        ),
-      ),
+      _filterBox(theme, AAMDropdown<int?>(
+        value: _filterAnio,
+        options: <int?>[null, ...aniosOpts],
+        itemLabel: (a) => a == null ? 'Año: todos' : gradeYearOrdinal(a),
+        fontSize: 13,
+        isDense: true,
+        onChanged: (v) => setState(() => _filterAnio = v),
+      )),
       const SizedBox(width: 12),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: theme.card,
-          border: Border.all(color: theme.borderCol),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: AAMDropdown<int?>(
-          value: _filterDivision,
-          options: <int?>[null, ...divisionOpts],
-          itemLabel: (d) => d == null ? 'División: todas' : divisionOrdinal(d),
-          fontSize: 13,
-          onChanged: (v) => setState(() => _filterDivision = v),
-        ),
-      ),
+      _filterBox(theme, AAMDropdown<int?>(
+        value: _filterDivision,
+        options: <int?>[null, ...divisionOpts],
+        itemLabel: (d) => d == null ? 'División: todas' : divisionOrdinal(d),
+        fontSize: 13,
+        isDense: true,
+        onChanged: (v) => setState(() => _filterDivision = v),
+      )),
       const SizedBox(width: 12),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: theme.card,
-          border: Border.all(color: theme.borderCol),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: AAMDropdown<String>(
-          value: _filterTaller,
-          options: tallerOpts,
-          fontSize: 13,
-          onChanged: (v) => setState(() => _filterTaller = v ?? 'Todos'),
-        ),
-      ),
+      _filterBox(theme, AAMDropdown<String>(
+        value: _filterTaller,
+        options: tallerOpts,
+        fontSize: 13,
+        isDense: true,
+        onChanged: (v) => setState(() => _filterTaller = v ?? 'Todos'),
+      )),
       const SizedBox(width: 12),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: theme.card,
-          border: Border.all(color: theme.borderCol),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: AAMDropdown<String>(
-          value: _filterEstado,
-          options: const ['Todos', 'Regular', 'Irregular', 'En riesgo', 'Recursante'],
-          fontSize: 13,
-          onChanged: (v) => setState(() => _filterEstado = v ?? 'Todos'),
-        ),
-      ),
+      _filterBox(theme, AAMDropdown<String>(
+        value: _filterEstado,
+        options: const ['Todos', 'Regular', 'Irregular', 'En riesgo', 'Recursante'],
+        fontSize: 13,
+        isDense: true,
+        onChanged: (v) => setState(() => _filterEstado = v ?? 'Todos'),
+      )),
       const SizedBox(width: 12),
       _buildMostrarInactivos(theme),
       const SizedBox(width: 12),
@@ -291,6 +275,20 @@ class _AlumnosScreenState extends State<AlumnosScreen> with AutoRefreshMixin<Alu
         style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
       ),
     ]);
+  }
+
+  Widget _filterBox(AAMTheme theme, Widget child) {
+    return Container(
+      height: _kFiltroAltura,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: theme.card,
+        border: Border.all(color: theme.borderCol),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: child,
+    );
   }
 
   bool get _hayFiltrosActivos =>
@@ -312,6 +310,7 @@ class _AlumnosScreenState extends State<AlumnosScreen> with AutoRefreshMixin<Alu
         child: Switch(
           value: _mostrarInactivos,
           activeThumbColor: AAMColors.accent,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           onChanged: _toggleMostrarInactivos,
         ),
       ),
@@ -515,12 +514,20 @@ class _AlumnoRowState extends State<_AlumnoRow> {
                   ),
                 ),
               ])),
-              // Estado (regularidad)
-              Expanded(flex: 2, child: AAMBadge(label: estadoLabel, color: estadoColor)),
+              // Estado (regularidad) — Align para que la píldora no se estire
+              // a todo el ancho de la columna (si no, dos badges anchas
+              // pegadas parecen superpuestas).
+              Expanded(flex: 2, child: Align(
+                alignment: Alignment.centerLeft,
+                child: AAMBadge(label: estadoLabel, color: estadoColor),
+              )),
               // Activo (baja lógica)
-              Expanded(flex: 1, child: AAMBadge(
-                label: a.isActive ? 'Activo' : 'Inactivo',
-                color: a.isActive ? AAMColors.success : AAMColors.textSec,
+              Expanded(flex: 1, child: Align(
+                alignment: Alignment.centerLeft,
+                child: AAMBadge(
+                  label: a.isActive ? 'Activo' : 'Inactivo',
+                  color: a.isActive ? AAMColors.success : AAMColors.textSec,
+                ),
               )),
               // Acciones
               Expanded(flex: 3, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [

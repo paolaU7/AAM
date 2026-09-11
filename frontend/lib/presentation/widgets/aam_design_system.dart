@@ -424,6 +424,7 @@ class AAMDropdown<T> extends StatelessWidget {
     this.itemLabel,
     this.hint,
     this.isExpanded = false,
+    this.isDense = false,
     this.fontSize = 14,
     this.fontWeight = FontWeight.w500,
   });
@@ -434,6 +435,9 @@ class AAMDropdown<T> extends StatelessWidget {
   final String Function(T)? itemLabel;
   final String? hint;
   final bool isExpanded;
+  // Compacta el alto del botón — útil cuando el dropdown va dentro de una
+  // caja de alto fijo (p.ej. la barra de filtros de Alumnos).
+  final bool isDense;
   final double fontSize;
   final FontWeight fontWeight;
 
@@ -448,6 +452,7 @@ class AAMDropdown<T> extends StatelessWidget {
           value: value,
           underline: const SizedBox.shrink(),
           isExpanded: isExpanded,
+          isDense: isDense,
           dropdownColor: theme.card,
           hint: hint == null ? null : Text(hint!, style: GoogleFonts.dmSans(fontSize: fontSize - 1, color: theme.textSec)),
           style: GoogleFonts.dmSans(fontSize: fontSize, fontWeight: fontWeight, color: theme.text),
