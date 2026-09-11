@@ -149,7 +149,7 @@ class ApiDatasource {
       'last_name': lastName,
       'national_id': nationalId,
       'course_id': courseId,
-      if (workshopGroupId != null) 'workshop_group_id': workshopGroupId,
+      'workshop_group_id': ?workshopGroupId,
     };
     final response = await http
         .post(
@@ -294,10 +294,10 @@ class ApiDatasource {
       'period_type': periodTypeToJson(periodType),
       'start_time': startTime.toJson(),
       'end_time': endTime.toJson(),
-      if (subjectId != null) 'subject_id': subjectId,
-      if (teacherId != null) 'teacher_id': teacherId,
+      'subject_id': ?subjectId,
+      'teacher_id': ?teacherId,
       'is_fifth_module': isFifthModule,
-      if (workshopGroupId != null) 'workshop_group_id': workshopGroupId,
+      'workshop_group_id': ?workshopGroupId,
     };
     final response = await http
         .post(
@@ -328,8 +328,8 @@ class ApiDatasource {
   /// (desplegable al armar el horario de un curso).
   Future<List<Subject>> getSubjects({int? gradeYear, String? specialtyId}) async {
     final query = <String, String>{
-      if (gradeYear != null) 'grade_year': '$gradeYear',
-      if (specialtyId != null) 'specialty_id': specialtyId,
+      'grade_year': ?(gradeYear != null ? '$gradeYear' : null),
+      'specialty_id': ?specialtyId,
     };
     final uri = Uri.parse('$baseUrl/subjects').replace(queryParameters: query.isEmpty ? null : query);
     final response = await http.get(uri).timeout(const Duration(seconds: 10));
@@ -731,7 +731,7 @@ class ApiDatasource {
   Future<AttendanceSummary> getResumen(DateTime date, {String? shift}) async {
     final uri = Uri.parse('$baseUrl/attendance/summary').replace(queryParameters: {
       'date': _dateOnly(date),
-      if (shift != null) 'shift': shift,
+      'shift': ?shift,
     });
     final response = await http.get(uri).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) throw Exception('Error al obtener el resumen de asistencia');
