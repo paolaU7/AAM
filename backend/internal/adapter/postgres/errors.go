@@ -40,3 +40,12 @@ func isFKViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23503"
 }
+
+// isUniqueViolation reports whether err is a unique_violation (23505) — used
+// where the raw Postgres message ("duplicate key value violates unique
+// constraint ...") isn't fit to show the user and a specific, friendly
+// message can be built instead (e.g. a duplicate name).
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}

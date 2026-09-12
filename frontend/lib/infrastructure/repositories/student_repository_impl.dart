@@ -66,4 +66,7 @@ class StudentRepositoryImpl implements StudentRepository {
 
   @override
   Future<Student> toggleActive(String id) => _datasource.toggleActiveAlumno(id);
+
+  @override
+  Future<void> eliminarAlumno(String id) => _datasource.eliminarAlumno(id);
 }

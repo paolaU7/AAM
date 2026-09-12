@@ -21,15 +21,40 @@ String subjectTypeLabel(SubjectType t) => switch (t) {
 
 /// Catálogo global de materias, reutilizable entre cursos y años.
 class Subject {
-  const Subject({required this.id, required this.name, required this.subjectType});
+  const Subject({
+    required this.id,
+    required this.name,
+    required this.subjectType,
+    this.shortCode = '',
+    this.shortCodeAuto = true,
+    this.isActive = true,
+    this.applicability = const [],
+  });
   final String id;
   final String name;
   final SubjectType subjectType;
+  // Identificador corto (ej. "M1r4t"). Se autogenera y se recalcula solo
+  // mientras shortCodeAuto sea true; editarlo a mano lo pone en false.
+  final String shortCode;
+  final bool shortCodeAuto;
+  // Baja lógica: solo se puede eliminar (borrado físico) una materia
+  // inactiva, y solo si no tiene cursos/profesores asociados.
+  final bool isActive;
+  // GET /subjects la trae embebida (ver backend) — permite filtrar la
+  // pantalla Materias por año/especialidad sin pedirla materia por materia.
+  // Vacía si el endpoint no la incluyó (p.ej. una respuesta vieja en caché).
+  final List<SubjectApplicability> applicability;
 
   factory Subject.fromJson(Map<String, dynamic> json) => Subject(
         id: json['id'].toString(),
         name: json['name'],
         subjectType: subjectTypeFromString(json['subject_type']),
+        shortCode: (json['short_code'] as String?) ?? '',
+        shortCodeAuto: (json['short_code_auto'] as bool?) ?? true,
+        isActive: (json['is_active'] as bool?) ?? true,
+        applicability: ((json['applicability'] as List?) ?? const [])
+            .map((j) => SubjectApplicability.fromJson(j as Map<String, dynamic>))
+            .toList(),
       );
 }
 

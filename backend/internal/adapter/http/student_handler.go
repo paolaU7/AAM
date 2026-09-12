@@ -16,6 +16,7 @@ func (s *Server) mountStudents(r chi.Router) {
 		r.Get("/{id}", s.getAlumno)
 		r.Put("/{id}", s.updateAlumno)
 		r.Post("/{id}/toggle-active", s.toggleAlumnoActive)
+		r.Delete("/{id}", s.deleteAlumno)
 	})
 }
 
@@ -113,6 +114,21 @@ func (s *Server) toggleAlumnoActive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toAlumnoDTO(*result))
+}
+
+// deleteAlumno hard-deletes — rejected (400) unless the student is already
+// de baja, or (409) if it still has associated records.
+func (s *Server) deleteAlumno(w http.ResponseWriter, r *http.Request) {
+	ok, err := s.Students.Delete(r.Context(), urlParam(r, "id"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if !ok {
+		detail(w, http.StatusNotFound, "Alumno no encontrado")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type importReportDTO struct {

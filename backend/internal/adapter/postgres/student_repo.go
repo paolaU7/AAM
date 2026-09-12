@@ -126,3 +126,30 @@ func (r *StudentRepo) ActualizarAlumno(ctx context.Context, id string, a domain.
 	}
 	return r.GetAlumnoPorID(ctx, id)
 }
+
+// EliminarAlumno hard-deletes a student — only allowed once it's already been
+// given de baja (is_active = false). Enforced here, not just in the panel, so
+// the rule holds regardless of caller.
+func (r *StudentRepo) EliminarAlumno(ctx context.Context, id string) (bool, error) {
+	var isActive bool
+	err := r.pool.QueryRow(ctx, `SELECT is_active FROM students WHERE id = $1`, id).Scan(&isActive)
+	if noRows(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if isActive {
+		return false, domain.NewDomainError("No se puede eliminar un alumno activo: dalo de baja primero.", 400)
+	}
+
+	tag, err := r.pool.Exec(ctx, `DELETE FROM students WHERE id = $1`, id)
+	if err != nil {
+		if isFKViolation(err) {
+			return false, domain.NewDomainError(
+				"No se puede eliminar: el alumno tiene registros asociados (asistencias, pulsera NFC, etc.).", 409)
+		}
+		return false, mapDBError(err, "No se pudo eliminar el alumno.")
+	}
+	return tag.RowsAffected() > 0, nil
+}

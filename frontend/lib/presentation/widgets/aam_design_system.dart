@@ -306,11 +306,18 @@ class AAMErrorWidget extends StatelessWidget {
 
 // ─── Tabla header helper ──────────────────────────────────────────────────────
 class AAMTableHeader extends StatelessWidget {
-  const AAMTableHeader({super.key, required this.columns, this.centeredColumns = const <int>{}});
+  const AAMTableHeader({
+    super.key,
+    required this.columns,
+    this.centeredColumns = const <int>{},
+    this.endColumns = const <int>{},
+  });
   final List<(String label, int flex)> columns;
-  /// Índices de columnas cuyo label va centrado (para que coincida con celdas
-  /// centradas en esa tabla). Por defecto todas van a la izquierda.
+  /// Sin efecto: todas las columnas van centradas ahora. Se mantienen estos
+  /// dos parámetros solo para no tener que tocar cada pantalla que ya los
+  /// pasaba.
   final Set<int> centeredColumns;
+  final Set<int> endColumns;
 
   @override
   Widget build(BuildContext context) {
@@ -330,7 +337,9 @@ class AAMTableHeader extends StatelessWidget {
                   flex: columns[i].$2,
                   child: Text(
                     columns[i].$1,
-                    textAlign: centeredColumns.contains(i) ? TextAlign.center : TextAlign.start,
+                    // Todas las columnas de todas las tablas van centradas —
+                    // encabezado y contenido (ver cada _XxxRow) por igual.
+                    textAlign: TextAlign.center,
                     style: GoogleFonts.dmSans(
                       fontSize: 11, fontWeight: FontWeight.w600,
                       color: theme.textSec, letterSpacing: 0.5,

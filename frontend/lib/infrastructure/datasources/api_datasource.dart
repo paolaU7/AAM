@@ -205,6 +205,20 @@ class ApiDatasource {
     throw ApiException('No se pudo cambiar el estado del alumno.');
   }
 
+  /// Borrado físico — el backend lo rechaza (400) si sigue activo, o (409) si
+  /// tiene registros asociados (asistencias, pulsera NFC, etc.).
+  Future<void> eliminarAlumno(String id) async {
+    final response = await http
+        .delete(Uri.parse('$baseUrl/alumnos/$id'))
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 204) return;
+    String detail = '';
+    try {
+      detail = (jsonDecode(response.body)['detail'] ?? '').toString();
+    } catch (_) {}
+    throw ApiException(detail.isNotEmpty ? detail : 'No se pudo eliminar el alumno.');
+  }
+
   // ── Horarios (time_slots) ────────────────────────────────────────────────────
 
   Future<List<TimeSlot>> getTimeSlotsByCourse(String courseId) async {
@@ -352,6 +366,73 @@ class ApiDatasource {
       detail = (jsonDecode(response.body)['detail'] ?? '').toString();
     } catch (_) {}
     throw ApiException(detail.isNotEmpty ? detail : 'No se pudo crear la materia.');
+  }
+
+  /// Actualiza el identificador corto de la materia. Un `shortCode` vacío
+  /// vuelve a modo automático (recalculado desde el nombre + años asignados);
+  /// uno no vacío queda fijo como override manual.
+  Future<Subject> actualizarSubjectShortCode({
+    required String subjectId,
+    required String shortCode,
+  }) async {
+    final response = await http
+        .put(
+          Uri.parse('$baseUrl/subjects/$subjectId'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'short_code': shortCode}),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) return Subject.fromJson(jsonDecode(response.body));
+    String detail = '';
+    try {
+      detail = (jsonDecode(response.body)['detail'] ?? '').toString();
+    } catch (_) {}
+    throw ApiException(detail.isNotEmpty ? detail : 'No se pudo actualizar el identificador de la materia.');
+  }
+
+  /// Edita nombre + tipo juntos (el lápiz de la fila en Materias).
+  Future<Subject> actualizarSubjectDetails({
+    required String subjectId,
+    required String name,
+    required SubjectType subjectType,
+  }) async {
+    final response = await http
+        .put(
+          Uri.parse('$baseUrl/subjects/$subjectId/details'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'name': name, 'subject_type': subjectTypeToJson(subjectType)}),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) return Subject.fromJson(jsonDecode(response.body));
+    String detail = '';
+    try {
+      detail = (jsonDecode(response.body)['detail'] ?? '').toString();
+    } catch (_) {}
+    throw ApiException(detail.isNotEmpty ? detail : 'No se pudo actualizar la materia.');
+  }
+
+  Future<Subject> toggleSubjectActive(String subjectId) async {
+    final response = await http
+        .post(Uri.parse('$baseUrl/subjects/$subjectId/toggle-active'))
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) return Subject.fromJson(jsonDecode(response.body));
+    String detail = '';
+    try {
+      detail = (jsonDecode(response.body)['detail'] ?? '').toString();
+    } catch (_) {}
+    throw ApiException(detail.isNotEmpty ? detail : 'No se pudo cambiar el estado de la materia.');
+  }
+
+  /// Borrado físico. El backend rechaza (400) si la materia sigue activa, o
+  /// (409) si tiene cursos/profesores asociados.
+  Future<void> eliminarSubject(String subjectId) async {
+    final response = await http.delete(Uri.parse('$baseUrl/subjects/$subjectId')).timeout(const Duration(seconds: 10));
+    if (response.statusCode == 204) return;
+    String detail = '';
+    try {
+      detail = (jsonDecode(response.body)['detail'] ?? '').toString();
+    } catch (_) {}
+    throw ApiException(detail.isNotEmpty ? detail : 'No se pudo eliminar la materia.');
   }
 
   Future<List<SubjectApplicability>> getSubjectApplicability(String subjectId) async {

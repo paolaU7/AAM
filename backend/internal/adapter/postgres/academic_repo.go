@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,41 +15,71 @@ type SubjectRepo struct{ pool *pgxpool.Pool }
 
 func NewSubjectRepo(pool *pgxpool.Pool) *SubjectRepo { return &SubjectRepo{pool} }
 
-func (r *SubjectRepo) GetAll(ctx context.Context, gradeYear *int, specialtyID *string) ([]domain.Subject, error) {
+func (r *SubjectRepo) GetAll(ctx context.Context, gradeYear *int, specialtyID *string) ([]domain.SubjectWithApplicability, error) {
 	var q string
 	var args []any
 	if gradeYear != nil && specialtyID != nil {
 		// Only the subjects enabled (via subject_applicability) for that
 		// grade year + specialty — feeds the schedule-building dropdown.
-		q = `SELECT DISTINCT s.id, s.name, s.subject_type::text
+		q = `SELECT DISTINCT s.id, s.name, s.subject_type::text, s.short_code, s.short_code_auto, s.is_active
 		     FROM subjects s
 		     JOIN subject_applicability sa ON sa.subject_id = s.id
 		     WHERE sa.grade_year = $1 AND sa.specialty_id = $2
 		     ORDER BY s.name`
 		args = append(args, *gradeYear, *specialtyID)
 	} else {
-		q = `SELECT s.id, s.name, s.subject_type::text FROM subjects s ORDER BY s.name`
+		q = `SELECT s.id, s.name, s.subject_type::text, s.short_code, s.short_code_auto, s.is_active FROM subjects s ORDER BY s.name`
 	}
 	rows, err := r.pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []domain.Subject
+	var subjects []domain.Subject
 	for rows.Next() {
 		var s domain.Subject
-		if err := rows.Scan(&s.ID, &s.Name, &s.SubjectType); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.SubjectType, &s.ShortCode, &s.ShortCodeAuto, &s.IsActive); err != nil {
+			rows.Close()
 			return nil, err
 		}
-		out = append(out, s)
+		subjects = append(subjects, s)
 	}
-	return out, rows.Err()
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// One extra query for every subject_applicability row (catalogue-sized,
+	// cheap), grouped in memory — avoids an N+1 request per subject for the
+	// Materias screen's año/especialidad filters.
+	appRows, err := r.pool.Query(ctx, applicabilitySelect+" ORDER BY sa.grade_year")
+	if err != nil {
+		return nil, err
+	}
+	defer appRows.Close()
+	bySubject := make(map[string][]domain.SubjectApplicability)
+	for appRows.Next() {
+		a, err := scanApplicability(appRows)
+		if err != nil {
+			return nil, err
+		}
+		bySubject[a.SubjectID] = append(bySubject[a.SubjectID], a)
+	}
+	if err := appRows.Err(); err != nil {
+		return nil, err
+	}
+
+	out := make([]domain.SubjectWithApplicability, 0, len(subjects))
+	for _, s := range subjects {
+		out = append(out, domain.SubjectWithApplicability{Subject: s, Applicability: bySubject[s.ID]})
+	}
+	return out, nil
 }
 
 func (r *SubjectRepo) GetByID(ctx context.Context, id string) (*domain.Subject, error) {
 	var s domain.Subject
-	err := r.pool.QueryRow(ctx, `SELECT id, name, subject_type::text FROM subjects WHERE id = $1`, id).
-		Scan(&s.ID, &s.Name, &s.SubjectType)
+	err := r.pool.QueryRow(ctx,
+		`SELECT id, name, subject_type::text, short_code, short_code_auto, is_active FROM subjects WHERE id = $1`, id).
+		Scan(&s.ID, &s.Name, &s.SubjectType, &s.ShortCode, &s.ShortCodeAuto, &s.IsActive)
 	if noRows(err) {
 		return nil, nil
 	}
@@ -58,16 +89,87 @@ func (r *SubjectRepo) GetByID(ctx context.Context, id string) (*domain.Subject, 
 	return &s, nil
 }
 
-func (r *SubjectRepo) Create(ctx context.Context, name, subjectType string) (domain.Subject, error) {
+func (r *SubjectRepo) Create(ctx context.Context, name, subjectType, shortCode string) (domain.Subject, error) {
 	var s domain.Subject
 	err := r.pool.QueryRow(ctx,
-		`INSERT INTO subjects (name, subject_type) VALUES ($1, $2::subject_type)
-		 RETURNING id, name, subject_type::text`,
-		name, subjectType).Scan(&s.ID, &s.Name, &s.SubjectType)
+		`INSERT INTO subjects (name, subject_type, short_code, short_code_auto)
+		 VALUES ($1, $2::subject_type, $3, TRUE)
+		 RETURNING id, name, subject_type::text, short_code, short_code_auto, is_active`,
+		name, subjectType, shortCode).Scan(&s.ID, &s.Name, &s.SubjectType, &s.ShortCode, &s.ShortCodeAuto, &s.IsActive)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return domain.Subject{}, domain.NewDomainError(fmt.Sprintf("Ya existe una materia llamada '%s'.", name), 409)
+		}
 		return domain.Subject{}, mapDBError(err, "No se pudo crear la materia.")
 	}
 	return s, nil
+}
+
+func (r *SubjectRepo) UpdateShortCode(ctx context.Context, id, shortCode string, auto bool) (*domain.Subject, error) {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE subjects SET short_code = $2, short_code_auto = $3 WHERE id = $1`,
+		id, shortCode, auto)
+	if err != nil {
+		return nil, mapDBError(err, "No se pudo actualizar el identificador de la materia.")
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, nil
+	}
+	return r.GetByID(ctx, id)
+}
+
+func (r *SubjectRepo) UpdateDetails(ctx context.Context, id, name, subjectType string) (*domain.Subject, error) {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE subjects SET name = $2, subject_type = $3::subject_type WHERE id = $1`,
+		id, name, subjectType)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, domain.NewDomainError(fmt.Sprintf("Ya existe una materia llamada '%s'.", name), 409)
+		}
+		return nil, mapDBError(err, "No se pudo actualizar la materia.")
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, nil
+	}
+	return r.GetByID(ctx, id)
+}
+
+func (r *SubjectRepo) ToggleActive(ctx context.Context, id string) (*domain.Subject, error) {
+	tag, err := r.pool.Exec(ctx, `UPDATE subjects SET is_active = NOT is_active WHERE id = $1`, id)
+	if err != nil {
+		return nil, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, nil
+	}
+	return r.GetByID(ctx, id)
+}
+
+// Delete hard-deletes a subject — only allowed once it's already been given
+// de baja (is_active = false). Enforced here, not just in the panel, so the
+// rule holds regardless of caller. Same pattern as StudentRepo.EliminarAlumno.
+func (r *SubjectRepo) Delete(ctx context.Context, id string) (bool, error) {
+	var isActive bool
+	err := r.pool.QueryRow(ctx, `SELECT is_active FROM subjects WHERE id = $1`, id).Scan(&isActive)
+	if noRows(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if isActive {
+		return false, domain.NewDomainError("No se puede eliminar una materia activa: dala de baja primero.", 400)
+	}
+
+	tag, err := r.pool.Exec(ctx, `DELETE FROM subjects WHERE id = $1`, id)
+	if err != nil {
+		if isFKViolation(err) {
+			return false, domain.NewDomainError(
+				"No se puede eliminar: la materia tiene cursos o profesores asociados.", 409)
+		}
+		return false, mapDBError(err, "No se pudo eliminar la materia.")
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
 // ── subject_applicability ────────────────────────────────────────────────────
@@ -124,6 +226,18 @@ func (r *SubjectApplicabilityRepo) Remove(ctx context.Context, id string) (bool,
 		return false, err
 	}
 	return tag.RowsAffected() > 0, nil
+}
+
+func (r *SubjectApplicabilityRepo) SubjectIDFor(ctx context.Context, id string) (string, error) {
+	var subjectID string
+	err := r.pool.QueryRow(ctx, `SELECT subject_id FROM subject_applicability WHERE id = $1`, id).Scan(&subjectID)
+	if noRows(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return subjectID, nil
 }
 
 // ── teachers ─────────────────────────────────────────────────────────────────

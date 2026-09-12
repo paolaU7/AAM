@@ -109,7 +109,7 @@ class _TeachersScreenState extends State<TeachersScreen> with AutoRefreshMixin<T
           ('Nombre', 3),
           ('Email', 3),
           ('Teléfono', 2),
-          ('', 2),
+          ('Acciones', 2),
         ]),
         Expanded(
           child: profesores.isEmpty
@@ -165,12 +165,15 @@ class _ProfesorRowState extends State<_ProfesorRow> {
         ),
         child: Row(children: [
           Expanded(flex: 3, child: Text(p.fullName,
+              textAlign: TextAlign.center,
               style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: widget.theme.text))),
           Expanded(flex: 3, child: Text(p.email ?? '—',
+              textAlign: TextAlign.center,
               style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
           Expanded(flex: 2, child: Text(p.phone ?? '—',
+              textAlign: TextAlign.center,
               style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
-          Expanded(flex: 2, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+          Expanded(flex: 2, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             _RowActionBtn(icon: Icons.assignment_outlined, tooltip: 'Ver asignaciones', onTap: widget.onVerAsignaciones),
           ])),
         ]),
@@ -429,9 +432,12 @@ class _AsignacionesModalState extends State<_AsignacionesModal> {
                                 Row(children: [
                                   Text(a.subjectName, style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: theme.text)),
                                   const SizedBox(width: 8),
+                                  // AAMColors.primary (navy de modo claro) como color
+                                  // fijo quedaba ilegible en modo oscuro — indigo se
+                                  // lee en los dos temas, igual que teal para "taller".
                                   AAMBadge(
                                     label: subjectTypeLabel(a.subjectType),
-                                    color: a.subjectType == SubjectType.workshop ? AAMColors.teal : AAMColors.primary,
+                                    color: a.subjectType == SubjectType.workshop ? AAMColors.teal : AAMColors.indigo,
                                   ),
                                 ]),
                                 Text(a.courseName ?? '', style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec)),

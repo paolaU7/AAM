@@ -962,12 +962,12 @@ class _DispositivosSectionState extends State<_DispositivosSection> {
       ));
     }
     return _card(theme, Column(mainAxisSize: MainAxisSize.min, children: [
-      const AAMTableHeader(columns: [('Nombre', 3), ('Ubicación', 4), ('', 2)]),
+      const AAMTableHeader(columns: [('Nombre', 3), ('Ubicación', 4), ('Acciones', 2)]),
       for (final e in items)
         _HoverRow(theme: theme, cells: [
           (3, Text(e.name, style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: theme.text))),
           (4, Text(e.location ?? '—', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec))),
-          (2, Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+          (2, Row(mainAxisSize: MainAxisSize.min, children: [
             _RowActionBtn(icon: Icons.edit_outlined, tooltip: 'Editar', onTap: () => _editarEntryPoint(e)),
             const SizedBox(width: 14),
             _RowActionBtn(icon: Icons.delete_outline, tooltip: 'Eliminar', danger: true, onTap: () => _eliminarEntryPoint(e)),
@@ -988,7 +988,7 @@ class _DispositivosSectionState extends State<_DispositivosSection> {
       ));
     }
     return _card(theme, Column(mainAxisSize: MainAxisSize.min, children: [
-      const AAMTableHeader(columns: [('Nombre', 3), ('Punto de acceso', 3), ('Estado', 2), ('Alta', 2), ('', 2)]),
+      const AAMTableHeader(columns: [('Nombre', 3), ('Punto de acceso', 3), ('Estado', 2), ('Alta', 2), ('Acciones', 2)]),
       for (final d in items)
         _HoverRow(theme: theme, cells: [
           (3, Text(d.name, style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: theme.text))),
@@ -998,7 +998,7 @@ class _DispositivosSectionState extends State<_DispositivosSection> {
               : const AAMBadge(label: 'Activo', color: AAMColors.success)),
           (2, Text(_fecha(d.createdAt), style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec))),
           (2, Align(
-            alignment: Alignment.centerRight,
+            alignment: Alignment.center,
             child: d.isRevoked
                 ? Text('—', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec))
                 : _RowActionBtn(icon: Icons.block_outlined, tooltip: 'Revocar', danger: true, onTap: () => _revocar(d)),
@@ -1315,7 +1315,9 @@ class _HoverRowState extends State<_HoverRow> {
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
-          children: [for (final c in widget.cells) Expanded(flex: c.$1, child: c.$2)],
+          // Center genérico: todas las columnas de todas las tablas van
+          // centradas, sin importar qué tipo de widget traiga cada celda.
+          children: [for (final c in widget.cells) Expanded(flex: c.$1, child: Center(child: c.$2))],
         ),
       ),
     );

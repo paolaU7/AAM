@@ -114,6 +114,25 @@ class _AlumnosScreenState extends State<AlumnosScreen> with AutoRefreshMixin<Alu
     }
   }
 
+  /// Borrado físico — el botón que llama a esto solo se muestra cuando
+  /// `!alumno.isActive` (ver `_AlumnoRow`), pero el backend igual vuelve a
+  /// validarlo: no hay que confiar solo en que el frontend lo oculte.
+  Future<void> _eliminarAlumno(Student alumno) async {
+    final ok = await showAamConfirmDialog(
+      context,
+      titulo: 'Eliminar alumno',
+      mensaje: '¿Eliminar a ${alumno.nombreCompleto} definitivamente? Esta acción no se puede deshacer. '
+          'Si tiene asistencias u otros registros asociados, no va a poder eliminarse.',
+    );
+    if (!ok) return;
+    try {
+      await _repo.eliminarAlumno(alumno.id);
+      _refresh();
+    } catch (e) {
+      if (mounted) _showError(context, e.toString());
+    }
+  }
+
   List<Student> _applyFilters(List<Student> all) {
     return all.where((a) {
       final matchSearch = _searchQuery.isEmpty ||
@@ -363,7 +382,7 @@ class _AlumnosScreenState extends State<AlumnosScreen> with AutoRefreshMixin<Alu
             ('Asistencia',   2),
             ('Estado',       2),
             ('Activo',       1),
-            ('',             3),
+            ('Acciones',     3),
           ],
           centeredColumns: {5, 6},
         ),
@@ -388,6 +407,7 @@ class _AlumnosScreenState extends State<AlumnosScreen> with AutoRefreshMixin<Alu
                     onVerDetalle: () => _abrirDetalle(alumnos[i]),
                     onEditar: () => _abrirEdicion(alumnos[i]),
                     onToggleActivo: () => _toggleActivo(alumnos[i]),
+                    onEliminar: () => _eliminarAlumno(alumnos[i]),
                   ),
                 ),
         ),
@@ -404,6 +424,7 @@ class _AlumnoRow extends StatefulWidget {
     required this.onVerDetalle,
     required this.onEditar,
     required this.onToggleActivo,
+    required this.onEliminar,
   });
 
   final Student alumno;
@@ -411,6 +432,7 @@ class _AlumnoRow extends StatefulWidget {
   final VoidCallback onVerDetalle;
   final VoidCallback onEditar;
   final VoidCallback onToggleActivo;
+  final VoidCallback onEliminar;
 
   @override
   State<_AlumnoRow> createState() => _AlumnoRowState();
@@ -456,7 +478,12 @@ class _AlumnoRowState extends State<_AlumnoRow> {
               border: Border(bottom: BorderSide(color: widget.theme.borderCol, width: 1)),
             ),
             child: Row(children: [
-              // Alumno
+              // Alumno — el avatar va en una posición fija (no centrado como
+              // bloque junto al nombre), para que las fotos de perfil queden
+              // alineadas entre sí en todas las filas sin importar el largo
+              // del nombre. El nombre se centra dentro del espacio que le
+              // queda (Expanded, no Flexible: así el ellipsis de nombres
+              // largos sigue funcionando igual que antes, sin overflow).
               Expanded(flex: 3, child: Row(children: [
                 CircleAvatar(
                   radius: 16,
@@ -469,10 +496,7 @@ class _AlumnoRowState extends State<_AlumnoRow> {
                     style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: AAMColors.primary)),
                 ),
                 const SizedBox(width: 10),
-                // Sin Expanded, un nombre largo desborda la fila (rayas de
-                // overflow). Acotado a una línea con puntos suspensivos; el
-                // nombre completo queda visible en el tooltip al pasar el mouse.
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
                   Tooltip(
                     message: a.nombreCompleto,
                     waitDuration: const Duration(milliseconds: 500),
@@ -491,16 +515,20 @@ class _AlumnoRowState extends State<_AlumnoRow> {
               ])),
               // Año
               Expanded(flex: 1, child: Text(a.gradeYear > 0 ? gradeYearOrdinal(a.gradeYear) : '—',
+                textAlign: TextAlign.center,
                 style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.text))),
               // División
               Expanded(flex: 1, child: Text(a.division > 0 ? divisionOrdinal(a.division) : '—',
+                textAlign: TextAlign.center,
                 style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.text))),
               // Taller
               Expanded(flex: 1, child: Text(a.taller ?? '—',
+                textAlign: TextAlign.center,
                 maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
               // DNI
               Expanded(flex: 2, child: Text(a.dniFormateado,
+                textAlign: TextAlign.center,
                 style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
               // Asistencia — centrada (coincide con el header centrado)
               Expanded(flex: 2, child: Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
@@ -525,14 +553,14 @@ class _AlumnoRowState extends State<_AlumnoRow> {
               )),
               // Activo (baja lógica)
               Expanded(flex: 1, child: Align(
-                alignment: Alignment.centerLeft,
+                alignment: Alignment.center,
                 child: AAMBadge(
                   label: a.isActive ? 'Activo' : 'Inactivo',
                   color: a.isActive ? AAMColors.success : AAMColors.textSec,
                 ),
               )),
               // Acciones
-              Expanded(flex: 3, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              Expanded(flex: 3, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 _ActionBtn(
                   icon: Icons.visibility_outlined,
                   color: widget.theme.text,
@@ -547,10 +575,6 @@ class _AlumnoRowState extends State<_AlumnoRow> {
                   onTap: widget.onEditar,
                 ),
                 const SizedBox(width: 6),
-                // Un alumno inactivo muestra la etiqueta "Reactivar" bien
-                // explícita (no solo un ícono con estado invertido) — así
-                // nadie hace click pensando que está dando de baja a
-                // alguien que ya está dado de baja.
                 if (a.isActive)
                   _ActionBtn(
                     icon: Icons.block_outlined,
@@ -558,8 +582,24 @@ class _AlumnoRowState extends State<_AlumnoRow> {
                     tooltip: 'Dar de baja',
                     onTap: widget.onToggleActivo,
                   )
-                else
-                  _ReactivarButton(onTap: widget.onToggleActivo),
+                else ...[
+                  _ActionBtn(
+                    icon: Icons.check_circle_outline,
+                    color: AAMColors.success,
+                    tooltip: 'Reactivar',
+                    onTap: widget.onToggleActivo,
+                  ),
+                  const SizedBox(width: 6),
+                  // Borrado físico: solo se puede una vez dado de baja — el
+                  // backend vuelve a validarlo, esto es solo para no mostrar
+                  // una acción que de entrada va a rechazar.
+                  _ActionBtn(
+                    icon: Icons.delete_outline,
+                    color: AAMColors.danger,
+                    tooltip: 'Eliminar definitivamente',
+                    onTap: widget.onEliminar,
+                  ),
+                ],
               ])),
             ]),
           ),
@@ -602,46 +642,6 @@ class _ActionBtnState extends State<_ActionBtn> {
             message: widget.tooltip,
             child: Icon(widget.icon, size: 16, color: widget.color),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Acción de reactivar un alumno inactivo — con label visible en vez de
-/// solo un ícono, para que no se confunda con "dar de baja" a alguien que
-/// ya está de baja.
-class _ReactivarButton extends StatefulWidget {
-  const _ReactivarButton({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  State<_ReactivarButton> createState() => _ReactivarButtonState();
-}
-
-class _ReactivarButtonState extends State<_ReactivarButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit:  (_) => setState(() => _hovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          decoration: BoxDecoration(
-            color: AAMColors.success.withAlpha(((_hovered ? 0.16 : 0.08) * 255).round()),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.check_circle_outline, size: 14, color: AAMColors.success),
-            const SizedBox(width: 4),
-            Text('Reactivar', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AAMColors.success)),
-          ]),
         ),
       ),
     );
@@ -1382,6 +1382,60 @@ class _DetalleChip extends StatelessWidget {
         Text('$label: ', style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: labelColor)),
         Text(value, style: GoogleFonts.dmSans(fontSize: 12, color: theme.text)),
       ]),
+    );
+  }
+}
+
+void _showError(BuildContext context, String mensaje) {
+  showDialog<void>(
+    context: context,
+    barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
+    builder: (_) => _ErrorModal(mensaje: mensaje),
+  );
+}
+
+class _ErrorModal extends StatelessWidget {
+  const _ErrorModal({required this.mensaje});
+  final String mensaje;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: AAMTheme(),
+      builder: (context, _) {
+        final theme = AAMTheme();
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            width: 400,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(color: theme.card, borderRadius: BorderRadius.circular(16)),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Icon(Icons.error_outline, size: 20, color: AAMColors.danger),
+                const SizedBox(width: 10),
+                Expanded(child: Text('No se pudo completar la acción',
+                    style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700, color: theme.text))),
+              ]),
+              const SizedBox(height: 10),
+              Text(mensaje, style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(color: AAMColors.accent, borderRadius: BorderRadius.circular(10)),
+                    child: Center(child: Text('Entendido',
+                        style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600, color: AAMColors.white))),
+                  ),
+                ),
+              ),
+            ]),
+          ),
+        );
+      },
     );
   }
 }

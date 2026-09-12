@@ -39,4 +39,9 @@ abstract class StudentRepository {
 
   /// Baja/alta lógica — no borra al alumno del sistema.
   Future<Student> toggleActive(String id);
+
+  /// Borrado físico — el backend lo rechaza (400) si el alumno sigue activo;
+  /// hay que darlo de baja primero. También puede rechazarlo (409) si tiene
+  /// registros asociados (asistencias, pulsera NFC, etc.).
+  Future<void> eliminarAlumno(String id);
 }

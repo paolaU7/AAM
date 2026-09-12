@@ -9,6 +9,10 @@ import (
 func (s *Server) mountAcademic(r chi.Router) {
 	r.Get("/subjects", s.listSubjects)
 	r.Post("/subjects", s.createSubject)
+	r.Put("/subjects/{id}", s.updateSubjectShortCode)
+	r.Put("/subjects/{id}/details", s.updateSubjectDetails)
+	r.Post("/subjects/{id}/toggle-active", s.toggleSubjectActive)
+	r.Delete("/subjects/{id}", s.deleteSubject)
 	r.Get("/subjects/{id}/applicability", s.listSubjectApplicability)
 	r.Post("/subjects/{id}/applicability", s.addSubjectApplicability)
 	r.Delete("/subjects/{id}/applicability/{applicabilityID}", s.removeSubjectApplicability)
@@ -35,7 +39,7 @@ func (s *Server) listSubjects(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, mapList(rows, toSubjectDTO))
+	writeJSON(w, http.StatusOK, mapList(rows, toSubjectWithApplicabilityDTO))
 }
 
 func (s *Server) createSubject(w http.ResponseWriter, r *http.Request) {
@@ -53,6 +57,81 @@ func (s *Server) createSubject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, toSubjectDTO(sub))
+}
+
+// updateSubjectShortCode edits a subject's short_code by hand. An empty
+// short_code in the body reverts it to automático (recomputed from the
+// current name + applicability).
+func (s *Server) updateSubjectShortCode(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		ShortCode string `json:"short_code"`
+	}
+	if err := decodeJSON(r, &b); err != nil {
+		writeErr(w, err)
+		return
+	}
+	sub, err := s.Academic.UpdateSubjectShortCode(r.Context(), urlParam(r, "id"), b.ShortCode)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if sub == nil {
+		detail(w, http.StatusNotFound, "No encontrado")
+		return
+	}
+	writeJSON(w, http.StatusOK, toSubjectDTO(*sub))
+}
+
+// updateSubjectDetails edits a subject's name + type together (the pencil in
+// the Materias screen).
+func (s *Server) updateSubjectDetails(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Name        string `json:"name"`
+		SubjectType string `json:"subject_type"`
+	}
+	if err := decodeJSON(r, &b); err != nil {
+		writeErr(w, err)
+		return
+	}
+	sub, err := s.Academic.UpdateSubjectDetails(r.Context(), urlParam(r, "id"), b.Name, b.SubjectType)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if sub == nil {
+		detail(w, http.StatusNotFound, "No encontrado")
+		return
+	}
+	writeJSON(w, http.StatusOK, toSubjectDTO(*sub))
+}
+
+// toggleSubjectActive flips is_active (dar de baja / dar de alta).
+func (s *Server) toggleSubjectActive(w http.ResponseWriter, r *http.Request) {
+	sub, err := s.Academic.ToggleSubjectActive(r.Context(), urlParam(r, "id"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if sub == nil {
+		detail(w, http.StatusNotFound, "No encontrado")
+		return
+	}
+	writeJSON(w, http.StatusOK, toSubjectDTO(*sub))
+}
+
+// deleteSubject hard-deletes — the service/repo enforce that it's already
+// dada de baja and has no associated courses/teachers.
+func (s *Server) deleteSubject(w http.ResponseWriter, r *http.Request) {
+	ok, err := s.Academic.DeleteSubject(r.Context(), urlParam(r, "id"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if !ok {
+		detail(w, http.StatusNotFound, "No encontrado")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) listSubjectApplicability(w http.ResponseWriter, r *http.Request) {

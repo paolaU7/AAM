@@ -371,6 +371,20 @@ CREATE TABLE subjects (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name            TEXT NOT NULL UNIQUE,
     subject_type    subject_type NOT NULL,
+    -- Identificador corto (ej. "M1r6t" para Matemática en 1ro y 6to). Se
+    -- genera solo al crear la materia y se recalcula solo cuando cambia su
+    -- subject_applicability, MIENTRAS short_code_auto sea true. Editarlo a
+    -- mano (Configuración → Materias) pone short_code_auto en false y a
+    -- partir de ahí deja de recalcularse — es la vía de escape si el
+    -- generado queda ambiguo entre dos materias (no hay UNIQUE acá a
+    -- propósito, por eso).
+    short_code      TEXT NOT NULL DEFAULT '',
+    short_code_auto BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Baja lógica: solo se puede borrar físicamente (DELETE) una materia
+    -- inactiva, y solo si no tiene cursos/profesores asociados (FK sin
+    -- CASCADE en course_subject_teachers/class_periods) — mismo patrón que
+    -- students/users.
+    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -772,13 +786,16 @@ INSERT INTO workshop_groups (id, course_id, group_label) VALUES
     ('40000000-0000-0000-0000-000000000005', '30000000-0000-0000-0000-000000000008', 'A'),
     ('40000000-0000-0000-0000-000000000006', '30000000-0000-0000-0000-000000000009', 'A');
 
-INSERT INTO subjects (id, name, subject_type) VALUES
-    ('50000000-0000-0000-0000-000000000001', 'Matemática', 'curricular'),
-    ('50000000-0000-0000-0000-000000000002', 'Lengua y Literatura', 'curricular'),
-    ('50000000-0000-0000-0000-000000000003', 'Física', 'curricular'),
-    ('50000000-0000-0000-0000-000000000004', 'Programación I', 'workshop'),
-    ('50000000-0000-0000-0000-000000000005', 'Electrónica Aplicada', 'workshop'),
-    ('50000000-0000-0000-0000-000000000006', 'Construcciones I', 'workshop');
+-- short_code precalculado a mano acá para que coincida con la aplicabilidad
+-- sembrada más abajo (M1r4t = Matemática en 1ro y 4to, etc.) — en la app lo
+-- calcula el backend solo.
+INSERT INTO subjects (id, name, subject_type, short_code) VALUES
+    ('50000000-0000-0000-0000-000000000001', 'Matemática', 'curricular', 'M1r4t'),
+    ('50000000-0000-0000-0000-000000000002', 'Lengua y Literatura', 'curricular', 'LL1r'),
+    ('50000000-0000-0000-0000-000000000003', 'Física', 'curricular', 'F2d'),
+    ('50000000-0000-0000-0000-000000000004', 'Programación I', 'workshop', 'PI4t'),
+    ('50000000-0000-0000-0000-000000000005', 'Electrónica Aplicada', 'workshop', 'EA4t'),
+    ('50000000-0000-0000-0000-000000000006', 'Construcciones I', 'workshop', 'CI6t');
 
 INSERT INTO subject_applicability (subject_id, grade_year, specialty_id) VALUES
     ('50000000-0000-0000-0000-000000000001', 1, (SELECT id FROM specialties WHERE name = 'Ciclo Básico')),

@@ -270,7 +270,7 @@ class _AsistenciaScreenState extends State<AsistenciaScreen> with AutoRefreshMix
           ('Retiro',  2),
           ('Motivo',  2),
           ('Estado',  2),
-          ('',        1),
+          ('Acciones', 1),
         ]),
         Expanded(
           child: registros.isEmpty
@@ -392,7 +392,7 @@ class _RegistroRowState extends State<_RegistroRow> {
         ),
         child: Row(children: [
           // Alumno
-          Expanded(flex: 3, child: Row(children: [
+          Expanded(flex: 3, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             CircleAvatar(
               radius: 15,
               backgroundColor: AAMColors.mint,
@@ -404,7 +404,7 @@ class _RegistroRowState extends State<_RegistroRow> {
               style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: widget.theme.text)),
           ])),
           // Método
-          Expanded(flex: 2, child: Row(children: [
+          Expanded(flex: 2, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             Icon(_metodoIcon(r.source), size: 14, color: widget.theme.textSec),
             const SizedBox(width: 6),
             Text(r.source.label,
@@ -412,22 +412,28 @@ class _RegistroRowState extends State<_RegistroRow> {
           ])),
           // Ingreso
           Expanded(flex: 2, child: Text(_fmtHora(r.entryTimestamp),
+            textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: widget.theme.text))),
           // Retiro
           Expanded(flex: 2, child: Text(_fmtHora(r.departureTime),
+            textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(fontSize: 13,
               color: r.hasEarlyDeparture ? AAMColors.warning : widget.theme.textSec))),
           // Motivo
           Expanded(flex: 2, child: Text(
             r.departureReason ?? '—',
+            textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(fontSize: 11, color: widget.theme.textSec),
             overflow: TextOverflow.ellipsis,
           )),
           // Estado
-          Expanded(flex: 2, child: AAMBadge(label: estadoLabel, color: estadoColor)),
+          Expanded(flex: 2, child: Align(
+            alignment: Alignment.center,
+            child: AAMBadge(label: estadoLabel, color: estadoColor),
+          )),
           // Acciones
-          Expanded(flex: 1, child: _hovered
-              ? Row(children: [
+          Expanded(flex: 1, child: Center(child: _hovered
+              ? Row(mainAxisSize: MainAxisSize.min, children: [
                   _ActionBtn(
                     icon: Icons.exit_to_app_outlined,
                     color: AAMColors.warning,
@@ -442,7 +448,7 @@ class _RegistroRowState extends State<_RegistroRow> {
                     onTap: widget.onNoComputable,
                   ),
                 ])
-              : Icon(Icons.more_horiz, size: 16, color: widget.theme.borderCol)),
+              : Icon(Icons.more_horiz, size: 16, color: widget.theme.borderCol))),
         ]),
       ),
     );

@@ -191,7 +191,7 @@ class _UsuariosScreenState extends State<UsuariosScreen> with AutoRefreshMixin<U
           ('Rol',     2),
           ('Email',   2),
           ('Estado',  2),
-          ('',        2),
+          ('Acciones', 2),
         ]),
         Expanded(
           child: usuarios.isEmpty
@@ -263,6 +263,9 @@ class _UsuarioRowState extends State<_UsuarioRow> {
           border: Border(bottom: BorderSide(color: widget.theme.borderCol, width: 1)),
         ),
         child: Row(children: [
+          // El avatar va en una posición fija (no centrado como bloque junto
+          // al nombre), para que las fotos de perfil queden alineadas entre
+          // sí en todas las filas sin importar el largo del nombre.
           Expanded(flex: 2, child: Row(children: [
             CircleAvatar(
               radius: 16,
@@ -272,32 +275,45 @@ class _UsuarioRowState extends State<_UsuarioRow> {
                   color: isDireccion ? AAMColors.white : AAMColors.primary)),
             ),
             const SizedBox(width: 10),
-            Text(u.fullName,
-              style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: widget.theme.text)),
+            Expanded(child: Text(u.fullName,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: widget.theme.text))),
           ])),
-          Expanded(flex: 2, child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: widget.theme.surfaceCol,
-              borderRadius: BorderRadius.circular(6),
+          Expanded(flex: 2, child: Align(
+            alignment: Alignment.center,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: widget.theme.surfaceCol,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(u.username,
+                style: TextStyle(fontSize: 12, fontFamily: 'monospace', color: widget.theme.text)),
             ),
-            child: Text(u.username,
-              style: TextStyle(fontSize: 12, fontFamily: 'monospace', color: widget.theme.text)),
           )),
-          Expanded(flex: 2, child: AAMBadge(
-            label: u.role.label,
-            color: isDireccion ? AAMColors.primary : AAMColors.accent,
+          Expanded(flex: 2, child: Align(
+            alignment: Alignment.center,
+            child: AAMBadge(
+              label: u.role.label,
+              color: isDireccion ? AAMColors.primary : AAMColors.accent,
+            ),
           )),
           Expanded(flex: 2, child: Text(u.email,
+            textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
-          Expanded(flex: 2, child: AAMBadge(
-            label: u.isActive ? 'Activo' : 'Inactivo',
-            color: u.isActive ? AAMColors.success : AAMColors.textSec,
+          Expanded(flex: 2, child: Align(
+            alignment: Alignment.center,
+            child: AAMBadge(
+              label: u.isActive ? 'Activo' : 'Inactivo',
+              color: u.isActive ? AAMColors.success : AAMColors.textSec,
+            ),
           )),
           // Acciones — Dirección solo puede editarse (no se puede deshabilitar
           // ni eliminar la propia cuenta de admin desde acá, para evitar
           // quedarse sin acceso).
-          Expanded(flex: 2, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+          Expanded(flex: 2, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             _RowActionBtn(icon: Icons.edit_outlined, tooltip: 'Editar usuario', color: AAMColors.accent, onTap: widget.onEdit),
             if (!isDireccion) ...[
               const SizedBox(width: 10),

@@ -14,6 +14,10 @@ type StudentRepo interface {
 	ToggleActive(ctx context.Context, id string) (*Alumno, error)
 	ExisteDNI(ctx context.Context, dni string) (bool, error)
 	CrearAlumnoManual(ctx context.Context, p CrearAlumnoParams) (*Alumno, error)
+	// EliminarAlumno hard-deletes. Returns a *DomainError (400) if the student
+	// is still active — only a student already given de baja can be deleted —
+	// or (409) if it has associated records (attendance, NFC bracelet, etc.).
+	EliminarAlumno(ctx context.Context, id string) (bool, error)
 }
 
 type CrearAlumnoParams struct {
@@ -88,10 +92,30 @@ type CreateTimeSlotParams struct {
 // SubjectRepo persists `subjects`.
 type SubjectRepo interface {
 	// GetAll: no filters -> full catalogue. With gradeYear+specialtyID -> only
-	// subjects enabled (via subject_applicability) for that combination.
-	GetAll(ctx context.Context, gradeYear *int, specialtyID *string) ([]Subject, error)
+	// subjects enabled (via subject_applicability) for that combination. Either
+	// way each row carries its full subject_applicability list embedded, so
+	// the Materias screen can filter by año/especialidad without N+1 requests.
+	GetAll(ctx context.Context, gradeYear *int, specialtyID *string) ([]SubjectWithApplicability, error)
 	GetByID(ctx context.Context, id string) (*Subject, error)
-	Create(ctx context.Context, name, subjectType string) (Subject, error)
+	// Create inserts with the given short_code and short_code_auto = true —
+	// there's nothing to have manually overridden yet on a brand-new subject.
+	Create(ctx context.Context, name, subjectType, shortCode string) (Subject, error)
+	// UpdateShortCode sets short_code (and short_code_auto) directly. Used
+	// both for the automatic recompute (auto = true, on create/applicability
+	// change) and for a manual edit (auto = false). Returns nil if the
+	// subject doesn't exist.
+	UpdateShortCode(ctx context.Context, id, shortCode string, auto bool) (*Subject, error)
+	// UpdateDetails changes name + subject_type together (the "editar
+	// materia" pencil in the Materias screen). Returns a *DomainError (409)
+	// on a duplicate name, or nil if the subject doesn't exist.
+	UpdateDetails(ctx context.Context, id, name, subjectType string) (*Subject, error)
+	// ToggleActive flips is_active (baja lógica). Returns nil if the subject
+	// doesn't exist.
+	ToggleActive(ctx context.Context, id string) (*Subject, error)
+	// Delete hard-deletes. Returns a *DomainError (400) if the subject is
+	// still active — only one already given de baja can be deleted — or
+	// (409) if it has associated records (courses, teachers, schedule).
+	Delete(ctx context.Context, id string) (bool, error)
 }
 
 // SubjectApplicabilityRepo persists `subject_applicability`.
@@ -99,6 +123,10 @@ type SubjectApplicabilityRepo interface {
 	GetBySubject(ctx context.Context, subjectID string) ([]SubjectApplicability, error)
 	Add(ctx context.Context, subjectID string, gradeYear int, specialtyID string) (SubjectApplicability, error)
 	Remove(ctx context.Context, id string) (bool, error)
+	// SubjectIDFor returns the subject_id owning applicability row id, or ""
+	// if the row doesn't exist. Used to recompute that subject's short_code
+	// after the row is removed.
+	SubjectIDFor(ctx context.Context, id string) (string, error)
 }
 
 // TeacherRepo persists `teachers`.

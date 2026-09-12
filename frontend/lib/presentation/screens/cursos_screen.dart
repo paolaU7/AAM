@@ -860,7 +860,7 @@ class _TabHorarioState extends State<_TabHorario> {
                 ('Turno', 2),
                 ('Actividad', 3),
                 ('Tolerancia', 2),
-                ('', 1),
+                ('Acciones', 1),
               ]),
               ...turno.map((s) => _FranjaRow(slot: s, theme: theme, onDelete: () => _eliminarFranja(s))),
             ],
@@ -918,22 +918,23 @@ class _FranjaRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(border: Border(bottom: BorderSide(color: theme.borderCol, width: 1))),
       child: Row(children: [
-        Expanded(flex: 2, child: Text(_diaLabel(slot.dayOfWeek), style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: theme.text))),
-        Expanded(flex: 3, child: Text('${slot.startTime.label} – ${slot.endTime.label}', style: GoogleFonts.dmSans(fontSize: 13, color: theme.text))),
-        Expanded(flex: 2, child: Align(alignment: Alignment.centerLeft,
+        Expanded(flex: 2, child: Text(_diaLabel(slot.dayOfWeek), textAlign: TextAlign.center, style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: theme.text))),
+        Expanded(flex: 3, child: Text('${slot.startTime.label} – ${slot.endTime.label}', textAlign: TextAlign.center, style: GoogleFonts.dmSans(fontSize: 13, color: theme.text))),
+        Expanded(flex: 2, child: Align(alignment: Alignment.center,
           child: AAMBadge(label: shiftTypeLabel(slot.shift), color: _shiftColor(slot.shift)))),
-        Expanded(flex: 3, child: esCurricular
+        Expanded(flex: 3, child: Align(alignment: Alignment.center, child: esCurricular
           ? Text('Curricular', style: GoogleFonts.dmSans(fontSize: 13, color: theme.text))
           : Row(mainAxisSize: MainAxisSize.min, children: [
               Container(width: 8, height: 8, decoration: const BoxDecoration(color: AAMColors.teal, shape: BoxShape.circle)),
               const SizedBox(width: 8),
               Text(activityTypeLabel(slot.activityType), style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: theme.text)),
-            ])),
+            ]))),
         Expanded(flex: 2, child: Text(
           slot.lateToleranceMinutes > 0 ? '${slot.lateToleranceMinutes} min' : '—',
+          textAlign: TextAlign.center,
           style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
         )),
-        Expanded(flex: 1, child: GestureDetector(onTap: onDelete, child: const Icon(Icons.delete_outline, size: 18, color: AAMColors.danger))),
+        Expanded(flex: 1, child: Center(child: GestureDetector(onTap: onDelete, child: const Icon(Icons.delete_outline, size: 18, color: AAMColors.danger)))),
       ]),
     );
   }

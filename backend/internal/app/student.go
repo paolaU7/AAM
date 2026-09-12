@@ -31,6 +31,12 @@ func (s StudentService) ToggleActive(ctx context.Context, id string) (*domain.Al
 	return s.Repo.ToggleActive(ctx, id)
 }
 
+// Delete is EliminarAlumno. The repo rejects it (400) unless the student is
+// already de baja, and (409) if it still has associated records.
+func (s StudentService) Delete(ctx context.Context, id string) (bool, error) {
+	return s.Repo.EliminarAlumno(ctx, id)
+}
+
 // workshopGroupBelongsToCourse checks the group (when given) belongs to courseID.
 func (s StudentService) workshopGroupBelongsToCourse(ctx context.Context, courseID string, workshopGroupID *string) error {
 	if workshopGroupID == nil || *workshopGroupID == "" {

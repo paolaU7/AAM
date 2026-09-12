@@ -17,6 +17,28 @@ func TestGenerarUsername(t *testing.T) {
 	}
 }
 
+func TestComputeSubjectShortCode(t *testing.T) {
+	cases := []struct {
+		name       string
+		gradeYears []int
+		want       string
+	}{
+		{"Matemática", []int{1, 6}, "M1r6t"},
+		{"Matemática", []int{6}, "M6t"},
+		{"Matemática", nil, "M"},
+		{"Lengua y Literatura", []int{1}, "LL1r"},
+		{"Física", []int{2}, "F2d"},
+		{"Programación I", []int{4}, "PI4t"},
+		// Mismo año repetido (dos especialidades) no duplica el sufijo.
+		{"Matemática", []int{4, 4}, "M4t"},
+	}
+	for _, c := range cases {
+		if got := ComputeSubjectShortCode(c.name, c.gradeYears); got != c.want {
+			t.Errorf("ComputeSubjectShortCode(%q, %v) = %q, want %q", c.name, c.gradeYears, got, c.want)
+		}
+	}
+}
+
 func TestAddOneCalendarMonth(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"2026-01-15", "2026-02-15"},

@@ -68,9 +68,12 @@ func toClassPeriodDTO(p domain.ClassPeriod) classPeriodDTO {
 // ── subject / teacher ────────────────────────────────────────────────────────
 
 type subjectDTO struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	SubjectType string `json:"subject_type"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	SubjectType   string `json:"subject_type"`
+	ShortCode     string `json:"short_code"`
+	ShortCodeAuto bool   `json:"short_code_auto"`
+	IsActive      bool   `json:"is_active"`
 }
 
 type subjectApplicabilityDTO struct {
@@ -79,6 +82,20 @@ type subjectApplicabilityDTO struct {
 	GradeYear     int    `json:"grade_year"`
 	SpecialtyID   string `json:"specialty_id"`
 	SpecialtyName string `json:"specialty_name"`
+}
+
+// subjectWithApplicabilityDTO is what GET /subjects returns: the parity shape
+// (id/name/subject_type) plus its full subject_applicability list, so the
+// Materias screen can filter by año/especialidad client-side. Additive over
+// subjectDTO — callers that only read id/name/subject_type are unaffected.
+type subjectWithApplicabilityDTO struct {
+	ID            string                    `json:"id"`
+	Name          string                    `json:"name"`
+	SubjectType   string                    `json:"subject_type"`
+	ShortCode     string                    `json:"short_code"`
+	ShortCodeAuto bool                      `json:"short_code_auto"`
+	IsActive      bool                      `json:"is_active"`
+	Applicability []subjectApplicabilityDTO `json:"applicability"`
 }
 
 type teacherDTO struct {
@@ -101,11 +118,19 @@ type subjectTeacherDTO struct {
 }
 
 func toSubjectDTO(s domain.Subject) subjectDTO {
-	return subjectDTO{s.ID, s.Name, s.SubjectType}
+	return subjectDTO{s.ID, s.Name, s.SubjectType, s.ShortCode, s.ShortCodeAuto, s.IsActive}
 }
 
 func toApplicabilityDTO(a domain.SubjectApplicability) subjectApplicabilityDTO {
 	return subjectApplicabilityDTO{a.ID, a.SubjectID, a.GradeYear, a.SpecialtyID, a.SpecialtyName}
+}
+
+func toSubjectWithApplicabilityDTO(s domain.SubjectWithApplicability) subjectWithApplicabilityDTO {
+	return subjectWithApplicabilityDTO{
+		ID: s.ID, Name: s.Name, SubjectType: s.SubjectType,
+		ShortCode: s.ShortCode, ShortCodeAuto: s.ShortCodeAuto, IsActive: s.IsActive,
+		Applicability: mapList(s.Applicability, toApplicabilityDTO),
+	}
 }
 
 func toTeacherDTO(t domain.Teacher) teacherDTO {
