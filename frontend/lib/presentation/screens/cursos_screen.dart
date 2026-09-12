@@ -2528,7 +2528,7 @@ class _SectionCard extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(child: Text(title, style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w700, color: theme.text))),
-          if (action != null) action!,
+          ?action,
         ]),
         if (subtitle != null) ...[
           const SizedBox(height: 6),
