@@ -33,7 +33,7 @@
 
 -cambiar el titlo de la seccion a profesores
 -cuando asignas un profe a una materia que simplemente pida el año no el curso tan especifico, en caso de ser de 4to año para arriba que tambien pida la especialidad, en base al año y especialidad (de ser requerida) que se pidan debe desplegar las materias asignadas para esos años
--agregar columna a la tabla que diga materias asignadas y muestre a todos las materias que ese profesor esta asignado, para no escribir todo el nombre de la materia y el curso simplemente optamos por mostrar con el identificante de materia que esta en la seccion de materias en la primera columna. de todas maneras al hacer click en esta columna de de materias asignadas a cada profe abira una vista mas detallada de todas las materias con el nombre e info necesaria completa.
+-agregar columna a la tabla que diga materias asignadas y muestre a todos las materias que ese profesor esta asignado, para no escribir todo el nombre de la materia y el curso simplemente optamos por mostrar con el identificante de materia que esta en la seccion de materias en la primera columna. de todas maneras al hacer click en esta columna de materias asignadas a cada profe abira una vista mas detallada de todas las materias con el nombre e info necesaria completa.
 -agregar boton de eliminar, editar, dar de baja, licencia medica/vacaciones a cada profe
 -agregar filtro por materia (con el identificante no nombre completo de la materia) y lupa
 -arreglar visul dentro de gestionar materias de profe el texto que indica que una materia es curricular no se lee en modo oscuro

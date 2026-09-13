@@ -190,8 +190,28 @@ func (s AcademicService) RemoveApplicability(ctx context.Context, id string) (bo
 	return ok, nil
 }
 
-func (s AcademicService) ListTeachers(ctx context.Context) ([]domain.Teacher, error) {
-	return s.Teachers.GetAll(ctx)
+// ListTeachers embeds each teacher's course_subject_teachers rows (one extra,
+// catalogue-sized query, grouped in memory) so the Profesores screen can show
+// a "materias asignadas" column without a request per row — same approach as
+// ListSubjects embedding subject_applicability.
+func (s AcademicService) ListTeachers(ctx context.Context) ([]domain.TeacherWithAssignments, error) {
+	teachers, err := s.Teachers.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	assignments, err := s.CourseSubject.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byTeacher := make(map[string][]domain.SubjectTeacherAssignment)
+	for _, a := range assignments {
+		byTeacher[a.TeacherID] = append(byTeacher[a.TeacherID], a)
+	}
+	out := make([]domain.TeacherWithAssignments, 0, len(teachers))
+	for _, t := range teachers {
+		out = append(out, domain.TeacherWithAssignments{Teacher: t, Assignments: byTeacher[t.ID]})
+	}
+	return out, nil
 }
 
 func (s AcademicService) CreateTeacher(ctx context.Context, fullName string, email, phone *string) (domain.Teacher, error) {

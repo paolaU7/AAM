@@ -1,0 +1,10 @@
+^C:\USERS\VILAG\DOCUMENTS\PROJECTITOS\AAM\FRONTEND\BUILD\WINDOWS\X64\CMAKEFILES\AC08BBB7B796AFC3610C283DC1F6D770\INSTALL_FORCE.RULE
+setlocal
+cd .
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

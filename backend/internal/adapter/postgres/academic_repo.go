@@ -289,7 +289,7 @@ func NewCourseSubjectTeacherRepo(pool *pgxpool.Pool) *CourseSubjectTeacherRepo {
 }
 
 const cstSelect = `
-	SELECT cst.course_id, cst.subject_id, sub.name, sub.subject_type::text,
+	SELECT cst.course_id, cst.subject_id, sub.name, sub.subject_type::text, sub.short_code,
 	       cst.teacher_id, t.full_name, t.email, t.phone,
 	       (c.id IS NOT NULL) AS has_course,
 	       COALESCE(c.academic_year, 0), COALESCE(c.grade_year, 0), COALESCE(c.division, 0)
@@ -303,7 +303,7 @@ func scanCST(row pgx.Row) (domain.SubjectTeacherAssignment, error) {
 	var hasCourse bool
 	var ay, gy, dv int
 	if err := row.Scan(
-		&a.CourseID, &a.SubjectID, &a.SubjectName, &a.SubjectType,
+		&a.CourseID, &a.SubjectID, &a.SubjectName, &a.SubjectType, &a.SubjectShortCode,
 		&a.TeacherID, &a.TeacherName, &a.TeacherEmail, &a.TeacherPhone,
 		&hasCourse, &ay, &gy, &dv,
 	); err != nil {
@@ -331,6 +331,10 @@ func (r *CourseSubjectTeacherRepo) collect(ctx context.Context, where string, ar
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+func (r *CourseSubjectTeacherRepo) GetAll(ctx context.Context) ([]domain.SubjectTeacherAssignment, error) {
+	return r.collect(ctx, "")
 }
 
 func (r *CourseSubjectTeacherRepo) GetByCourse(ctx context.Context, courseID string) ([]domain.SubjectTeacherAssignment, error) {

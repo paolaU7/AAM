@@ -140,18 +140,25 @@ class _DashboardContent extends StatelessWidget {
     );
   }
 
+  String _saludoSegunHora(int hour) {
+    if (hour >= 6 && hour < 12) return 'Buenos días';
+    if (hour >= 12 && hour < 20) return 'Buenas tardes';
+    return 'Buenas noches';
+  }
+
   Widget _buildGreeting(AAMTheme theme) {
     final now = DateTime.now();
     final dias = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
     final meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
     final fechaStr = '${dias[now.weekday - 1]} ${now.day} de ${meses[now.month - 1]} ${now.year}';
+    final saludo = _saludoSegunHora(now.hour);
 
     return Row(
       children: [
         Expanded(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Buenos días, Dirección',
+            Text('$saludo, Dirección',
               style: GoogleFonts.dmSans(fontSize: 28, fontWeight: FontWeight.w700, color: theme.text)),
             Text('$fechaStr · Turno Mañana',
               style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec)),

@@ -137,6 +137,10 @@ type TeacherRepo interface {
 
 // CourseSubjectTeacherRepo persists `course_subject_teachers`.
 type CourseSubjectTeacherRepo interface {
+	// GetAll returns every assignment row (all teachers, all courses) — used
+	// to embed each teacher's assigned subjects in GET /teachers without an
+	// N+1 request per row.
+	GetAll(ctx context.Context) ([]SubjectTeacherAssignment, error)
 	GetByCourse(ctx context.Context, courseID string) ([]SubjectTeacherAssignment, error)
 	GetByTeacher(ctx context.Context, teacherID string) ([]SubjectTeacherAssignment, error)
 	// Assign upserts on (course_id, subject_id).

@@ -79,7 +79,7 @@ class _TeachersScreenState extends State<TeachersScreen> with AutoRefreshMixin<T
   Widget _buildScreen(AAMTheme theme) {
     return Column(children: [
       AAMTopbar(
-        title: 'Profes',
+        title: 'Profesores',
         actions: [
           AAMButton(label: 'Nuevo profesor', icon: Icons.add, onPressed: _abrirNuevoProfesor),
         ],
@@ -107,6 +107,7 @@ class _TeachersScreenState extends State<TeachersScreen> with AutoRefreshMixin<T
       child: Column(children: [
         const AAMTableHeader(columns: [
           ('Nombre', 3),
+          ('Materias asignadas', 3),
           ('Email', 3),
           ('Teléfono', 2),
           ('Acciones', 2),
@@ -167,6 +168,25 @@ class _ProfesorRowState extends State<_ProfesorRow> {
           Expanded(flex: 3, child: Text(p.fullName,
               textAlign: TextAlign.center,
               style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: widget.theme.text))),
+          Expanded(flex: 3, child: Align(
+            alignment: Alignment.center,
+            child: GestureDetector(
+              onTap: widget.onVerAsignaciones,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: p.assignments.isEmpty
+                    ? Text('Sin materias', style: GoogleFonts.dmSans(fontSize: 12, color: widget.theme.textSec))
+                    : Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 6, runSpacing: 4,
+                        children: p.assignments.map((a) => _ShortCodeChip(
+                          shortCode: a.subjectShortCode.isEmpty ? a.subjectName : a.subjectShortCode,
+                          theme: widget.theme,
+                        )).toList(),
+                      ),
+              ),
+            ),
+          )),
           Expanded(flex: 3, child: Text(p.email ?? '—',
               textAlign: TextAlign.center,
               style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
@@ -178,6 +198,28 @@ class _ProfesorRowState extends State<_ProfesorRow> {
           ])),
         ]),
       ),
+    );
+  }
+}
+
+// Mismo look que el chip de short_code en materias_screen.dart — así la
+// misma "M1r4t" se ve igual en las dos pantallas.
+class _ShortCodeChip extends StatelessWidget {
+  const _ShortCodeChip({required this.shortCode, required this.theme});
+  final String shortCode;
+  final AAMTheme theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: theme.surfaceCol,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: theme.borderCol),
+      ),
+      child: Text(shortCode,
+          style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: theme.textSec)),
     );
   }
 }

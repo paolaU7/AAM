@@ -179,7 +179,7 @@ func (s *Server) listTeachers(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, mapList(rows, toTeacherDTO))
+	writeJSON(w, http.StatusOK, mapList(rows, toTeacherWithAssignmentsDTO))
 }
 
 func (s *Server) createTeacher(w http.ResponseWriter, r *http.Request) {

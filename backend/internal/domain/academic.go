@@ -107,13 +107,26 @@ type Teacher struct {
 
 // SubjectTeacherAssignment is which subject a teacher teaches, in ONE course.
 type SubjectTeacherAssignment struct {
-	CourseID     string
-	SubjectID    string
-	SubjectName  string
-	SubjectType  string
-	TeacherID    string
-	TeacherName  string
-	TeacherEmail *string
-	TeacherPhone *string
-	CourseName   *string
+	CourseID    string
+	SubjectID   string
+	SubjectName string
+	SubjectType string
+	// SubjectShortCode mirrors Subject.ShortCode — carried here so the
+	// Profesores screen can show a compact "materias asignadas" column
+	// (e.g. "M1r4t") without a second lookup against the subjects catalogue.
+	SubjectShortCode string
+	TeacherID        string
+	TeacherName      string
+	TeacherEmail     *string
+	TeacherPhone     *string
+	CourseName       *string
+}
+
+// TeacherWithAssignments bundles a teacher with every course_subject_teachers
+// row it appears in — the shape the Profesores screen needs to show a
+// "materias asignadas" column without a request per row (same idea as
+// SubjectWithApplicability for the Materias screen).
+type TeacherWithAssignments struct {
+	Teacher
+	Assignments []SubjectTeacherAssignment
 }

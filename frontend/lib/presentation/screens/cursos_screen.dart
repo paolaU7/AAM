@@ -1068,7 +1068,10 @@ class _HorarioGrilla extends StatelessWidget {
   Widget _celdaClase(ClassPeriod p) {
     final suplente = _esSuplente(p);
     final esTaller = p.workshopGroupId != null;
-    final acento = esTaller ? AAMColors.teal : AAMColors.primary;
+    // AAMColors.primary (navy de modo claro) como color fijo queda ilegible
+    // en modo oscuro — indigo se lee en los dos temas, igual que teal para
+    // "taller" (mismo criterio que materias_screen.dart / teachers_screen.dart).
+    final acento = esTaller ? AAMColors.teal : AAMColors.indigo;
     return Container(
       margin: const EdgeInsets.all(4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -1099,7 +1102,7 @@ class _LeyendaHorario extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Wrap(spacing: 16, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-      _swatch(AAMColors.primary, 'Curricular', outlined: true),
+      _swatch(AAMColors.indigo, 'Curricular', outlined: true),
       _swatch(AAMColors.teal, 'Taller (contraturno)'),
       _swatchDashed('Recreo / Almuerzo'),
       _swatchDot(AAMColors.violet, '5to módulo'),
@@ -1585,7 +1588,7 @@ class _MateriaRow extends StatelessWidget {
             const SizedBox(width: 8),
             AAMBadge(
               label: subjectTypeLabel(asignacion.subjectType),
-              color: asignacion.subjectType == SubjectType.workshop ? AAMColors.teal : AAMColors.primary,
+              color: asignacion.subjectType == SubjectType.workshop ? AAMColors.teal : AAMColors.indigo,
             ),
           ]),
           Text('Prof. ${asignacion.teacherName}', style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec)),

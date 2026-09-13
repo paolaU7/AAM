@@ -27,7 +27,7 @@ class _AppShellState extends State<AppShell> {
     _NavItem(icon: Icons.fact_check_outlined,      label: 'Asistencia',    index: 2),
     _NavItem(icon: Icons.school_outlined,          label: 'Cursos',        index: 3),
     _NavItem(icon: Icons.menu_book_outlined,       label: 'Materias',      index: 4),
-    _NavItem(icon: Icons.badge_outlined,           label: 'Profes',        index: 5),
+    _NavItem(icon: Icons.badge_outlined,           label: 'Profesores',    index: 5),
     _NavItem(icon: Icons.manage_accounts_outlined, label: 'Usuarios',      index: 6),
     _NavItem(icon: Icons.bar_chart_outlined,       label: 'Reportes',      index: 7),
     _NavItem(icon: Icons.settings_outlined,        label: 'Configuración', index: 8),

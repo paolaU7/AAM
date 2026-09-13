@@ -105,16 +105,29 @@ type teacherDTO struct {
 	Phone    *string `json:"phone"`
 }
 
+// teacherWithAssignmentsDTO is what GET /teachers returns: the parity shape
+// plus every course_subject_teachers row, so the Profesores screen can show
+// a "materias asignadas" column (and filter by materia) without a request
+// per row. Additive over teacherDTO.
+type teacherWithAssignmentsDTO struct {
+	ID          string              `json:"id"`
+	FullName    string              `json:"full_name"`
+	Email       *string             `json:"email"`
+	Phone       *string             `json:"phone"`
+	Assignments []subjectTeacherDTO `json:"assignments"`
+}
+
 type subjectTeacherDTO struct {
-	CourseID     string  `json:"course_id"`
-	SubjectID    string  `json:"subject_id"`
-	SubjectName  string  `json:"subject_name"`
-	SubjectType  string  `json:"subject_type"`
-	TeacherID    string  `json:"teacher_id"`
-	TeacherName  string  `json:"teacher_name"`
-	TeacherEmail *string `json:"teacher_email"`
-	TeacherPhone *string `json:"teacher_phone"`
-	CourseName   *string `json:"course_name"`
+	CourseID         string  `json:"course_id"`
+	SubjectID        string  `json:"subject_id"`
+	SubjectName      string  `json:"subject_name"`
+	SubjectType      string  `json:"subject_type"`
+	SubjectShortCode string  `json:"subject_short_code"`
+	TeacherID        string  `json:"teacher_id"`
+	TeacherName      string  `json:"teacher_name"`
+	TeacherEmail     *string `json:"teacher_email"`
+	TeacherPhone     *string `json:"teacher_phone"`
+	CourseName       *string `json:"course_name"`
 }
 
 func toSubjectDTO(s domain.Subject) subjectDTO {
@@ -137,9 +150,16 @@ func toTeacherDTO(t domain.Teacher) teacherDTO {
 	return teacherDTO{t.ID, t.FullName, t.Email, t.Phone}
 }
 
+func toTeacherWithAssignmentsDTO(t domain.TeacherWithAssignments) teacherWithAssignmentsDTO {
+	return teacherWithAssignmentsDTO{
+		ID: t.ID, FullName: t.FullName, Email: t.Email, Phone: t.Phone,
+		Assignments: mapList(t.Assignments, toSubjectTeacherDTO),
+	}
+}
+
 func toSubjectTeacherDTO(a domain.SubjectTeacherAssignment) subjectTeacherDTO {
-	return subjectTeacherDTO{a.CourseID, a.SubjectID, a.SubjectName, a.SubjectType, a.TeacherID, a.TeacherName,
-		a.TeacherEmail, a.TeacherPhone, a.CourseName}
+	return subjectTeacherDTO{a.CourseID, a.SubjectID, a.SubjectName, a.SubjectType, a.SubjectShortCode,
+		a.TeacherID, a.TeacherName, a.TeacherEmail, a.TeacherPhone, a.CourseName}
 }
 
 // ── preceptors ───────────────────────────────────────────────────────────────

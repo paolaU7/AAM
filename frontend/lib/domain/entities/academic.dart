@@ -86,17 +86,31 @@ class SubjectApplicability {
 
 /// Profesor — dato de referencia para el horario. No tiene login.
 class Teacher {
-  const Teacher({required this.id, required this.fullName, this.email, this.phone});
+  const Teacher({
+    required this.id,
+    required this.fullName,
+    this.email,
+    this.phone,
+    this.assignments = const [],
+  });
   final String id;
   final String fullName;
   final String? email;
   final String? phone;
+  // GET /teachers la trae embebida (ver backend) — permite mostrar la
+  // columna "Materias asignadas" y filtrar por materia sin pedirlas
+  // profesor por profesor. Vacía si el endpoint no la incluyó (respuesta
+  // vieja en caché).
+  final List<SubjectTeacherAssignment> assignments;
 
   factory Teacher.fromJson(Map<String, dynamic> json) => Teacher(
         id: json['id'].toString(),
         fullName: json['full_name'],
         email: json['email'],
         phone: json['phone'],
+        assignments: ((json['assignments'] as List?) ?? const [])
+            .map((j) => SubjectTeacherAssignment.fromJson(j as Map<String, dynamic>))
+            .toList(),
       );
 }
 
@@ -107,6 +121,7 @@ class SubjectTeacherAssignment {
     required this.subjectId,
     required this.subjectName,
     required this.subjectType,
+    this.subjectShortCode = '',
     required this.teacherId,
     required this.teacherName,
     this.teacherEmail,
@@ -118,6 +133,10 @@ class SubjectTeacherAssignment {
   final String subjectId;
   final String subjectName;
   final SubjectType subjectType;
+  // Identificador corto de la materia (ej. "M1r4t") — mismo que se ve en la
+  // primera columna de la sección Materias. Se usa para la columna "Materias
+  // asignadas" de Profesores, en vez de repetir nombre + curso completos.
+  final String subjectShortCode;
   final String teacherId;
   final String teacherName;
   final String? teacherEmail;
@@ -129,6 +148,7 @@ class SubjectTeacherAssignment {
         subjectId: json['subject_id'].toString(),
         subjectName: json['subject_name'],
         subjectType: subjectTypeFromString(json['subject_type']),
+        subjectShortCode: (json['subject_short_code'] as String?) ?? '',
         teacherId: json['teacher_id'].toString(),
         teacherName: json['teacher_name'],
         teacherEmail: json['teacher_email'],
