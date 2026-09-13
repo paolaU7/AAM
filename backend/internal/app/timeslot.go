@@ -43,6 +43,32 @@ func (s TimeSlotService) CreateForCourse(ctx context.Context, courseID, shift, a
 	})
 }
 
+func (s TimeSlotService) UpdateForCourse(ctx context.Context, id, courseID, shift, activityType string, dayOfWeek int, startTime, endTime string, lateTolerance int) (domain.TimeSlot, error) {
+	if activityType != domain.ActivityMainShift && activityType != domain.ActivityAfterShift {
+		return domain.TimeSlot{}, domain.NewDomainError("activity_type debe ser 'main_shift' o 'after_shift' para el turno principal.", 400)
+	}
+	if err := domain.ValidateDayOfWeek(dayOfWeek); err != nil {
+		return domain.TimeSlot{}, err
+	}
+	if err := domain.ValidateTimeOrder(startTime, endTime); err != nil {
+		return domain.TimeSlot{}, err
+	}
+	cid := courseID
+	return s.Repo.Update(ctx, id, domain.CreateTimeSlotParams{
+		CourseID:             &cid,
+		Shift:                shift,
+		ActivityType:         activityType,
+		DayOfWeek:            dayOfWeek,
+		StartTime:            startTime,
+		EndTime:              endTime,
+		LateToleranceMinutes: lateTolerance,
+	})
+}
+
+func (s TimeSlotService) Disable(ctx context.Context, id string) (bool, error) {
+	return s.Repo.Disable(ctx, id)
+}
+
 func (s TimeSlotService) Delete(ctx context.Context, id string) (bool, error) {
 	return s.Repo.Delete(ctx, id)
 }

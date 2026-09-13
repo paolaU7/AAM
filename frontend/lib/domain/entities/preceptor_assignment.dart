@@ -4,22 +4,28 @@ import 'time_slot.dart' show ShiftType, shiftTypeFromString;
 /// lectivo. Un curso puede tener un preceptor distinto por turno.
 class CoursePreceptor {
   const CoursePreceptor({
+    required this.id,
     required this.courseId,
     required this.shift,
     required this.preceptorId,
     required this.preceptorName,
+    required this.dayOfWeek,
   });
 
+  final String id;
   final String courseId;
   final ShiftType shift;
   final String preceptorId;
   final String preceptorName;
+  final int dayOfWeek;
 
   factory CoursePreceptor.fromJson(Map<String, dynamic> json) => CoursePreceptor(
+        id: json['id'].toString(),
         courseId: json['course_id'].toString(),
         shift: shiftTypeFromString(json['shift']),
         preceptorId: json['preceptor_id'].toString(),
         preceptorName: json['preceptor_name'],
+        dayOfWeek: (json['day_of_week'] as num).toInt(),
       );
 }
 

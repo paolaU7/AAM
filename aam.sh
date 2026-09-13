@@ -10,6 +10,11 @@
 
 set -euo pipefail
 
+# ── Forzar codificación UTF-8 en Git Bash/MinGW para Flutter/Dart ───────────
+export LC_ALL=en_US.UTF-8
+export LANG=en_US.UTF-8
+export PYTHONIOENCODING=utf-8
+
 # ── Colores ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'

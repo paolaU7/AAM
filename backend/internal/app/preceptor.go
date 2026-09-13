@@ -16,15 +16,18 @@ func (s PreceptorService) ByCourse(ctx context.Context, courseID string) ([]doma
 	return s.Permanent.GetByCourse(ctx, courseID)
 }
 
-func (s PreceptorService) Assign(ctx context.Context, courseID, shift, preceptorID string) (domain.CoursePreceptor, error) {
+func (s PreceptorService) Assign(ctx context.Context, courseID, shift, preceptorID string, dayOfWeek int) (domain.CoursePreceptor, error) {
 	if preceptorID == "" {
 		return domain.CoursePreceptor{}, domain.NewDomainError("El preceptor es obligatorio.", 400)
 	}
-	return s.Permanent.Assign(ctx, courseID, shift, preceptorID)
+	if err := domain.ValidateDayOfWeek(dayOfWeek); err != nil {
+		return domain.CoursePreceptor{}, err
+	}
+	return s.Permanent.Assign(ctx, courseID, shift, preceptorID, dayOfWeek)
 }
 
-func (s PreceptorService) Remove(ctx context.Context, courseID, shift string) (bool, error) {
-	return s.Permanent.Remove(ctx, courseID, shift)
+func (s PreceptorService) Remove(ctx context.Context, id string) (bool, error) {
+	return s.Permanent.Remove(ctx, id)
 }
 
 func (s PreceptorService) TempByCourse(ctx context.Context, courseID string) ([]domain.CoursePreceptorTempAssignment, error) {

@@ -15,6 +15,7 @@ class TimeSlot {
     required this.startTime,
     required this.endTime,
     this.lateToleranceMinutes = 0,
+    this.isActive = true,
   });
 
   final String id;
@@ -26,6 +27,7 @@ class TimeSlot {
   final ClockTime startTime;
   final ClockTime endTime;
   final int lateToleranceMinutes;
+  final bool isActive;
 
   factory TimeSlot.fromJson(Map<String, dynamic> json) => TimeSlot(
         id: json['id'].toString(),
@@ -37,6 +39,7 @@ class TimeSlot {
         startTime: ClockTime.parse(json['start_time'] as String),
         endTime: ClockTime.parse(json['end_time'] as String),
         lateToleranceMinutes: (json['late_tolerance_minutes'] as num?)?.toInt() ?? 0,
+        isActive: json['is_active'] as bool? ?? true,
       );
 }
 

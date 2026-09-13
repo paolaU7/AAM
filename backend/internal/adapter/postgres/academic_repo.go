@@ -252,8 +252,20 @@ func scanTeacher(row pgx.Row) (domain.Teacher, error) {
 	return t, err
 }
 
-func (r *TeacherRepo) GetAll(ctx context.Context) ([]domain.Teacher, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id, full_name, email, phone FROM teachers ORDER BY full_name`)
+func (r *TeacherRepo) GetAll(ctx context.Context, subjectID *string) ([]domain.Teacher, error) {
+	var q string
+	var args []any
+	if subjectID != nil && *subjectID != "" {
+		q = `SELECT t.id, t.full_name, t.email, t.phone 
+		     FROM teachers t
+		     JOIN teacher_subjects ts ON ts.teacher_id = t.id
+		     WHERE ts.subject_id = $1
+		     ORDER BY t.full_name`
+		args = append(args, *subjectID)
+	} else {
+		q = `SELECT id, full_name, email, phone FROM teachers ORDER BY full_name`
+	}
+	rows, err := r.pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

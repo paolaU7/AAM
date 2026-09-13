@@ -16,6 +16,8 @@ func (s *Server) mountCourses(r chi.Router) {
 
 		r.Get("/{id}/time-slots", s.listCourseTimeSlots)
 		r.Post("/{id}/time-slots", s.createCourseTimeSlot)
+		r.Put("/{id}/time-slots/{slotID}", s.updateCourseTimeSlot)
+		r.Post("/{id}/time-slots/{slotID}/toggle-active", s.toggleCourseTimeSlot)
 		r.Delete("/{id}/time-slots/{slotID}", s.deleteCourseTimeSlot)
 
 		r.Get("/{id}/class-periods", s.listClassPeriods)
@@ -28,7 +30,7 @@ func (s *Server) mountCourses(r chi.Router) {
 
 		r.Get("/{id}/preceptors", s.listCoursePreceptors)
 		r.Post("/{id}/preceptors", s.assignCoursePreceptor)
-		r.Delete("/{id}/preceptors/{shift}", s.removeCoursePreceptor)
+		r.Delete("/{id}/preceptors/{assignmentID}", s.removeCoursePreceptor)
 
 		r.Get("/{id}/preceptor-temp-assignments", s.listCoursePreceptorTemp)
 		r.Post("/{id}/preceptor-temp-assignments", s.createCoursePreceptorTemp)
@@ -130,6 +132,34 @@ func (s *Server) createCourseTimeSlot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, toTimeSlotDTO(slot))
+}
+
+func (s *Server) updateCourseTimeSlot(w http.ResponseWriter, r *http.Request) {
+	var b timeSlotBody
+	if err := decodeJSON(r, &b); err != nil {
+		writeErr(w, err)
+		return
+	}
+	slot, err := s.TimeSlots.UpdateForCourse(r.Context(), urlParam(r, "slotID"), urlParam(r, "id"), b.Shift, b.ActivityType,
+		b.DayOfWeek, b.StartTime, b.EndTime, b.LateToleranceMinutes)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toTimeSlotDTO(slot))
+}
+
+func (s *Server) toggleCourseTimeSlot(w http.ResponseWriter, r *http.Request) {
+	ok, err := s.TimeSlots.Disable(r.Context(), urlParam(r, "slotID"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if !ok {
+		detail(w, http.StatusNotFound, "Time slot not found")
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) deleteCourseTimeSlot(w http.ResponseWriter, r *http.Request) {
@@ -262,12 +292,13 @@ func (s *Server) assignCoursePreceptor(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		Shift       string `json:"shift"`
 		PreceptorID string `json:"preceptor_id"`
+		DayOfWeek   int    `json:"day_of_week"`
 	}
 	if err := decodeJSON(r, &b); err != nil {
 		writeErr(w, err)
 		return
 	}
-	row, err := s.Preceptors.Assign(r.Context(), urlParam(r, "id"), b.Shift, b.PreceptorID)
+	row, err := s.Preceptors.Assign(r.Context(), urlParam(r, "id"), b.Shift, b.PreceptorID, b.DayOfWeek)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -276,7 +307,7 @@ func (s *Server) assignCoursePreceptor(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) removeCoursePreceptor(w http.ResponseWriter, r *http.Request) {
-	ok, err := s.Preceptors.Remove(r.Context(), urlParam(r, "id"), urlParam(r, "shift"))
+	ok, err := s.Preceptors.Remove(r.Context(), urlParam(r, "assignmentID"))
 	if err != nil {
 		writeErr(w, err)
 		return

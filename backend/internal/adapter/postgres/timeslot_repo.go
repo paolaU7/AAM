@@ -15,14 +15,14 @@ func NewTimeSlotRepo(pool *pgxpool.Pool) *TimeSlotRepo { return &TimeSlotRepo{po
 const timeSlotSelect = `
 	SELECT id, shift::text, activity_type::text, day_of_week,
 	       start_time::text, end_time::text, late_tolerance_minutes,
-	       course_id, workshop_group_id
+	       is_active, course_id, workshop_group_id
 	FROM time_slots`
 
 func scanTimeSlot(row pgx.Row) (domain.TimeSlot, error) {
 	var t domain.TimeSlot
 	err := row.Scan(&t.ID, &t.Shift, &t.ActivityType, &t.DayOfWeek,
 		&t.StartTime, &t.EndTime, &t.LateToleranceMinutes,
-		&t.CourseID, &t.WorkshopGroupID)
+		&t.IsActive, &t.CourseID, &t.WorkshopGroupID)
 	return t, err
 }
 
@@ -44,11 +44,11 @@ func (r *TimeSlotRepo) collect(ctx context.Context, where string, args ...any) (
 }
 
 func (r *TimeSlotRepo) GetByCourse(ctx context.Context, courseID string) ([]domain.TimeSlot, error) {
-	return r.collect(ctx, "WHERE course_id = $1", courseID)
+	return r.collect(ctx, "WHERE course_id = $1 AND is_active = true", courseID)
 }
 
 func (r *TimeSlotRepo) GetByWorkshopGroup(ctx context.Context, workshopGroupID string) ([]domain.TimeSlot, error) {
-	return r.collect(ctx, "WHERE workshop_group_id = $1", workshopGroupID)
+	return r.collect(ctx, "WHERE workshop_group_id = $1 AND is_active = true", workshopGroupID)
 }
 
 func (r *TimeSlotRepo) Create(ctx context.Context, p domain.CreateTimeSlotParams) (domain.TimeSlot, error) {
@@ -68,8 +68,34 @@ func (r *TimeSlotRepo) Create(ctx context.Context, p domain.CreateTimeSlotParams
 	return t, err
 }
 
+func (r *TimeSlotRepo) Update(ctx context.Context, id string, p domain.CreateTimeSlotParams) (domain.TimeSlot, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE time_slots
+		SET shift = $2::shift_type, activity_type = $3::activity_type, day_of_week = $4,
+		    start_time = $5::time, end_time = $6::time, late_tolerance_minutes = $7
+		WHERE id = $1`,
+		id, p.Shift, p.ActivityType, p.DayOfWeek, p.StartTime, p.EndTime, p.LateToleranceMinutes)
+	if err != nil {
+		return domain.TimeSlot{}, mapDBError(err, "No se pudo actualizar la franja horaria.")
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.TimeSlot{}, mapDBError(nil, "Franja horaria no encontrada.")
+	}
+	t, err := scanTimeSlot(r.pool.QueryRow(ctx, timeSlotSelect+" WHERE id = $1", id))
+	return t, err
+}
+
 func (r *TimeSlotRepo) Delete(ctx context.Context, id string) (bool, error) {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM time_slots WHERE id = $1`, id)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+// Disable soft-deletes the time slot by setting is_active = false.
+func (r *TimeSlotRepo) Disable(ctx context.Context, id string) (bool, error) {
+	tag, err := r.pool.Exec(ctx, `UPDATE time_slots SET is_active = false WHERE id = $1`, id)
 	if err != nil {
 		return false, err
 	}

@@ -272,6 +272,46 @@ class ApiDatasource {
     throw ApiException(detail.isNotEmpty ? detail : 'No se pudo crear la franja horaria.');
   }
 
+  Future<TimeSlot> actualizarTimeSlotDeCurso({
+    required String courseId,
+    required String slotId,
+    required ShiftType shift,
+    required ActivityType activityType,
+    required int dayOfWeek,
+    required ClockTime startTime,
+    required ClockTime endTime,
+    int lateToleranceMinutes = 0,
+  }) async {
+    final body = {
+      'shift': shiftTypeToJson(shift),
+      'activity_type': activityTypeToJson(activityType),
+      'day_of_week': dayOfWeek,
+      'start_time': startTime.toJson(),
+      'end_time': endTime.toJson(),
+      'late_tolerance_minutes': lateToleranceMinutes,
+    };
+    final response = await http
+        .put(
+          Uri.parse('$baseUrl/courses/$courseId/time-slots/$slotId'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) return TimeSlot.fromJson(jsonDecode(response.body));
+    String detail = '';
+    try {
+      detail = (jsonDecode(response.body)['detail'] ?? '').toString();
+    } catch (_) {}
+    throw ApiException(detail.isNotEmpty ? detail : 'No se pudo actualizar la franja horaria.');
+  }
+
+  Future<void> toggleTimeSlotActive(String courseId, String slotId) async {
+    final response = await http
+        .post(Uri.parse('$baseUrl/courses/$courseId/time-slots/$slotId/toggle-active'))
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) throw Exception('No se pudo cambiar el estado de la franja horaria.');
+  }
+
   Future<void> eliminarTimeSlot(String courseId, String slotId) async {
     final response = await http
         .delete(Uri.parse('$baseUrl/courses/$courseId/time-slots/$slotId'))
@@ -471,8 +511,9 @@ class ApiDatasource {
     if (response.statusCode != 204) throw Exception('No se pudo quitar la aplicabilidad.');
   }
 
-  Future<List<Teacher>> getTeachers() async {
-    final response = await http.get(Uri.parse('$baseUrl/teachers')).timeout(const Duration(seconds: 10));
+  Future<List<Teacher>> getTeachers({String? subjectId}) async {
+    final uri = subjectId != null ? '$baseUrl/teachers?subject_id=$subjectId' : '$baseUrl/teachers';
+    final response = await http.get(Uri.parse(uri)).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) throw Exception('Error al obtener profesores');
     final List<dynamic> data = jsonDecode(response.body);
     return data.map((j) => Teacher.fromJson(j)).toList();
@@ -560,21 +601,26 @@ class ApiDatasource {
     required String courseId,
     required ShiftType shift,
     required String preceptorId,
+    required int dayOfWeek,
   }) async {
     final response = await http
         .post(
           Uri.parse('$baseUrl/courses/$courseId/preceptors'),
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'shift': shiftTypeToJson(shift), 'preceptor_id': preceptorId}),
+          body: jsonEncode({
+            'shift': shiftTypeToJson(shift),
+            'preceptor_id': preceptorId,
+            'day_of_week': dayOfWeek,
+          }),
         )
         .timeout(const Duration(seconds: 10));
     if (response.statusCode == 201) return CoursePreceptor.fromJson(jsonDecode(response.body));
     throw ApiException('No se pudo asignar el preceptor.');
   }
 
-  Future<void> quitarCoursePreceptor(String courseId, ShiftType shift) async {
+  Future<void> quitarCoursePreceptor(String courseId, String assignmentId) async {
     final response = await http
-        .delete(Uri.parse('$baseUrl/courses/$courseId/preceptors/${shiftTypeToJson(shift)}'))
+        .delete(Uri.parse('$baseUrl/courses/$courseId/preceptors/$assignmentId'))
         .timeout(const Duration(seconds: 10));
     if (response.statusCode != 204) throw Exception('No se pudo quitar el preceptor.');
   }

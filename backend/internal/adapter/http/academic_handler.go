@@ -174,7 +174,11 @@ func (s *Server) removeSubjectApplicability(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) listTeachers(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.Academic.ListTeachers(r.Context())
+	var subjectID *string
+	if v := r.URL.Query().Get("subject_id"); v != "" {
+		subjectID = &v
+	}
+	rows, err := s.Academic.ListTeachers(r.Context(), subjectID)
 	if err != nil {
 		writeErr(w, err)
 		return

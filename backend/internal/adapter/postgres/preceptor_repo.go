@@ -17,18 +17,18 @@ func NewCoursePreceptorRepo(pool *pgxpool.Pool) *CoursePreceptorRepo {
 }
 
 const coursePreceptorSelect = `
-	SELECT cp.course_id, cp.shift::text, cp.preceptor_id, u.full_name
+	SELECT cp.id, cp.course_id, cp.shift::text, cp.preceptor_id, u.full_name, cp.day_of_week
 	FROM course_preceptors cp
 	JOIN users u ON u.id = cp.preceptor_id`
 
 func scanCoursePreceptor(row pgx.Row) (domain.CoursePreceptor, error) {
 	var c domain.CoursePreceptor
-	err := row.Scan(&c.CourseID, &c.Shift, &c.PreceptorID, &c.PreceptorName)
+	err := row.Scan(&c.ID, &c.CourseID, &c.Shift, &c.PreceptorID, &c.PreceptorName, &c.DayOfWeek)
 	return c, err
 }
 
 func (r *CoursePreceptorRepo) GetByCourse(ctx context.Context, courseID string) ([]domain.CoursePreceptor, error) {
-	rows, err := r.pool.Query(ctx, coursePreceptorSelect+" WHERE cp.course_id = $1", courseID)
+	rows, err := r.pool.Query(ctx, coursePreceptorSelect+" WHERE cp.course_id = $1 ORDER BY cp.shift, cp.day_of_week", courseID)
 	if err != nil {
 		return nil, err
 	}
@@ -44,22 +44,24 @@ func (r *CoursePreceptorRepo) GetByCourse(ctx context.Context, courseID string) 
 	return out, rows.Err()
 }
 
-func (r *CoursePreceptorRepo) Assign(ctx context.Context, courseID, shift, preceptorID string) (domain.CoursePreceptor, error) {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO course_preceptors (course_id, shift, preceptor_id)
-		VALUES ($1, $2::shift_type, $3)
-		ON CONFLICT (course_id, shift) DO UPDATE SET preceptor_id = EXCLUDED.preceptor_id`,
-		courseID, shift, preceptorID)
+func (r *CoursePreceptorRepo) Assign(ctx context.Context, courseID, shift, preceptorID string, dayOfWeek int) (domain.CoursePreceptor, error) {
+	var id string
+	err := r.pool.QueryRow(ctx, `
+		INSERT INTO course_preceptors (course_id, shift, preceptor_id, day_of_week)
+		VALUES ($1, $2::shift_type, $3, $4)
+		ON CONFLICT (course_id, shift, day_of_week) DO UPDATE SET preceptor_id = EXCLUDED.preceptor_id
+		RETURNING id`,
+		courseID, shift, preceptorID, dayOfWeek).Scan(&id)
 	if err != nil {
 		return domain.CoursePreceptor{}, mapDBError(err, "No se pudo asignar el preceptor.")
 	}
 	return scanCoursePreceptor(r.pool.QueryRow(ctx,
-		coursePreceptorSelect+" WHERE cp.course_id = $1 AND cp.shift::text = $2", courseID, shift))
+		coursePreceptorSelect+" WHERE cp.id = $1", id))
 }
 
-func (r *CoursePreceptorRepo) Remove(ctx context.Context, courseID, shift string) (bool, error) {
+func (r *CoursePreceptorRepo) Remove(ctx context.Context, id string) (bool, error) {
 	tag, err := r.pool.Exec(ctx,
-		`DELETE FROM course_preceptors WHERE course_id = $1 AND shift::text = $2`, courseID, shift)
+		`DELETE FROM course_preceptors WHERE id = $1`, id)
 	if err != nil {
 		return false, err
 	}

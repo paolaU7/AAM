@@ -194,8 +194,8 @@ func (s AcademicService) RemoveApplicability(ctx context.Context, id string) (bo
 // catalogue-sized query, grouped in memory) so the Profesores screen can show
 // a "materias asignadas" column without a request per row — same approach as
 // ListSubjects embedding subject_applicability.
-func (s AcademicService) ListTeachers(ctx context.Context) ([]domain.TeacherWithAssignments, error) {
-	teachers, err := s.Teachers.GetAll(ctx)
+func (s AcademicService) ListTeachers(ctx context.Context, subjectID *string) ([]domain.TeacherWithAssignments, error) {
+	teachers, err := s.Teachers.GetAll(ctx, subjectID)
 	if err != nil {
 		return nil, err
 	}

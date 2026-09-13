@@ -1,12 +1,15 @@
 package domain
 
-// CoursePreceptor is the PERMANENT preceptor in charge of a course, per shift,
-// for the whole school year. A course can have a different preceptor per shift.
+// CoursePreceptor is a PERMANENT preceptor in charge of a course for a
+// specific shift+day combination. Multiple preceptors can cover different
+// days of the week within the same course+shift.
 type CoursePreceptor struct {
+	ID            string
 	CourseID      string
 	Shift         string
 	PreceptorID   string
 	PreceptorName string
+	DayOfWeek     int // ISO 1..7
 }
 
 // CoursePreceptorTempAssignment is a TEMPORARY replacement (e.g. leave), with a

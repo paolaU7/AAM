@@ -35,10 +35,11 @@ type timeSlotDTO struct {
 	StartTime            string  `json:"start_time"`
 	EndTime              string  `json:"end_time"`
 	LateToleranceMinutes int     `json:"late_tolerance_minutes"`
+	IsActive             bool    `json:"is_active"`
 }
 
 func toTimeSlotDTO(t domain.TimeSlot) timeSlotDTO {
-	return timeSlotDTO{t.ID, t.CourseID, t.WorkshopGroupID, t.Shift, t.ActivityType, t.DayOfWeek, t.StartTime, t.EndTime, t.LateToleranceMinutes}
+	return timeSlotDTO{t.ID, t.CourseID, t.WorkshopGroupID, t.Shift, t.ActivityType, t.DayOfWeek, t.StartTime, t.EndTime, t.LateToleranceMinutes, t.IsActive}
 }
 
 // ── class periods ────────────────────────────────────────────────────────────
@@ -165,10 +166,12 @@ func toSubjectTeacherDTO(a domain.SubjectTeacherAssignment) subjectTeacherDTO {
 // ── preceptors ───────────────────────────────────────────────────────────────
 
 type coursePreceptorDTO struct {
+	ID            string `json:"id"`
 	CourseID      string `json:"course_id"`
 	Shift         string `json:"shift"`
 	PreceptorID   string `json:"preceptor_id"`
 	PreceptorName string `json:"preceptor_name"`
+	DayOfWeek     int    `json:"day_of_week"`
 }
 
 type coursePreceptorTempDTO struct {
@@ -183,7 +186,7 @@ type coursePreceptorTempDTO struct {
 }
 
 func toCoursePreceptorDTO(c domain.CoursePreceptor) coursePreceptorDTO {
-	return coursePreceptorDTO{c.CourseID, c.Shift, c.PreceptorID, c.PreceptorName}
+	return coursePreceptorDTO{c.ID, c.CourseID, c.Shift, c.PreceptorID, c.PreceptorName, c.DayOfWeek}
 }
 
 func toCoursePreceptorTempDTO(a domain.CoursePreceptorTempAssignment) coursePreceptorTempDTO {

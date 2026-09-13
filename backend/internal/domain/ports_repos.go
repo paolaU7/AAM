@@ -75,7 +75,10 @@ type TimeSlotRepo interface {
 	GetByCourse(ctx context.Context, courseID string) ([]TimeSlot, error)
 	GetByWorkshopGroup(ctx context.Context, workshopGroupID string) ([]TimeSlot, error)
 	Create(ctx context.Context, p CreateTimeSlotParams) (TimeSlot, error)
+	Update(ctx context.Context, id string, p CreateTimeSlotParams) (TimeSlot, error)
 	Delete(ctx context.Context, id string) (bool, error)
+	// Disable soft-deletes: sets is_active = false instead of deleting.
+	Disable(ctx context.Context, id string) (bool, error)
 }
 
 type CreateTimeSlotParams struct {
@@ -131,7 +134,7 @@ type SubjectApplicabilityRepo interface {
 
 // TeacherRepo persists `teachers`.
 type TeacherRepo interface {
-	GetAll(ctx context.Context) ([]Teacher, error)
+	GetAll(ctx context.Context, subjectID *string) ([]Teacher, error)
 	Create(ctx context.Context, fullName string, email, phone *string) (Teacher, error)
 }
 
@@ -151,9 +154,11 @@ type CourseSubjectTeacherRepo interface {
 // CoursePreceptorRepo persists `course_preceptors`.
 type CoursePreceptorRepo interface {
 	GetByCourse(ctx context.Context, courseID string) ([]CoursePreceptor, error)
-	// Assign upserts on (course_id, shift).
-	Assign(ctx context.Context, courseID, shift, preceptorID string) (CoursePreceptor, error)
-	Remove(ctx context.Context, courseID, shift string) (bool, error)
+	// Assign inserts a new row for (course_id, shift, day_of_week).
+	// ON CONFLICT upserts the preceptor_id.
+	Assign(ctx context.Context, courseID, shift, preceptorID string, dayOfWeek int) (CoursePreceptor, error)
+	// Remove deletes a single assignment by its UUID id.
+	Remove(ctx context.Context, id string) (bool, error)
 }
 
 // CoursePreceptorTempAssignmentRepo persists `course_preceptor_temp_assignments`.

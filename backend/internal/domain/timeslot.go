@@ -26,6 +26,7 @@ type TimeSlot struct {
 	StartTime            string // HH:MM:SS
 	EndTime              string // HH:MM:SS
 	LateToleranceMinutes int
+	IsActive             bool
 	CourseID             *string
 	WorkshopGroupID      *string
 }

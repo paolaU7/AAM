@@ -353,7 +353,7 @@ class _NuevoCursoCard extends StatelessWidget {
   }
 }
 
-// ─── Alta / edición de curso ─────────────────────────────────────────────────
+// ─── Alta / edición de curso ──────────────────────────────────────────────────────────────────────────────────
 /// Un solo formulario para ambos casos: `curso == null` es alta, `curso`
 /// seteado es edición (precarga los valores y llama a actualizarCurso).
 class _CursoForm extends StatefulWidget {
@@ -647,7 +647,7 @@ class _CursoDetalleState extends State<_CursoDetalle> {
   }
 }
 
-// ─── Tab: Datos generales ────────────────────────────────────────────────────
+// ─── Tab: Datos generales ───────────────────────────────────────────────────
 class _TabDatosGenerales extends StatelessWidget {
   const _TabDatosGenerales({required this.curso, required this.ds, required this.onCursoActualizado});
   final Course curso;
@@ -752,7 +752,15 @@ class _TabHorarioState extends State<_TabHorario> {
       ]);
       if (!mounted) return;
       setState(() {
-        _turnoPrincipal = results[0] as List<TimeSlot>;
+        final slots = results[0] as List<TimeSlot>;
+        slots.sort((a, b) {
+          int cmp = a.dayOfWeek.compareTo(b.dayOfWeek);
+          if (cmp != 0) return cmp;
+          cmp = a.shift.index.compareTo(b.shift.index);
+          if (cmp != 0) return cmp;
+          return a.startTime.compareTo(b.startTime);
+        });
+        _turnoPrincipal = slots;
         _detallado = results[1] as List<ClassPeriod>;
         _materiasCurso = results[2] as List<SubjectTeacherAssignment>;
         _grupos = results[3] as List<WorkshopGroup>;
@@ -773,6 +781,24 @@ class _TabHorarioState extends State<_TabHorario> {
       builder: (_) => _NuevaFranjaForm(ds: widget.ds, courseId: widget.curso.id),
     );
     if (result == true) _cargar();
+  }
+
+  Future<void> _editarFranja(TimeSlot slot) async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
+      builder: (_) => _NuevaFranjaForm(ds: widget.ds, courseId: widget.curso.id, franjaExistente: slot),
+    );
+    if (result == true) _cargar();
+  }
+
+  Future<void> _toggleFranjaActive(TimeSlot slot) async {
+    try {
+      await widget.ds.toggleTimeSlotActive(widget.curso.id, slot.id);
+      _cargar();
+    } catch (_) {
+      if (mounted) setState(() => _error = 'No se pudo cambiar el estado del horario.');
+    }
   }
 
   Future<void> _eliminarFranja(TimeSlot slot) async {
@@ -820,6 +846,55 @@ class _TabHorarioState extends State<_TabHorario> {
     }
   }
 
+  Future<void> _editarPeriodo(ClassPeriod p) async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
+      builder: (_) => _NuevoPeriodoForm(
+        ds: widget.ds,
+        courseId: widget.curso.id,
+        materias: _materiasCurso,
+        grupos: _grupos,
+        profesores: _profesores,
+        periodoExistente: p,
+      ),
+    );
+    if (result == true) _cargar();
+  }
+
+  Future<void> _onTapPeriodo(ClassPeriod p) async {
+    if (p.periodType == PeriodType.recess || p.periodType == PeriodType.lunch) {
+      showDialog(
+        context: context,
+        barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
+        builder: (_) => _DetalleRecreoModal(periodo: p),
+      );
+      return;
+    }
+
+    final action = await showDialog<String>(
+      context: context,
+      barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
+      builder: (_) => _DetalleMateriaModal(periodo: p, esSuplente: _esSuplente(p)),
+    );
+
+    if (action == 'edit') {
+      _editarPeriodo(p);
+    } else if (action == 'delete') {
+      _eliminarPeriodo(p);
+    }
+  }
+
+  bool _esSuplente(ClassPeriod p) {
+    if (p.periodType != PeriodType.lesson || p.teacherId == null || p.subjectId == null) return false;
+    try {
+      final titular = _materiasCurso.firstWhere((m) => m.subjectId == p.subjectId);
+      return titular.teacherId != p.teacherId;
+    } catch (_) {
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = AAMTheme();
@@ -829,6 +904,8 @@ class _TabHorarioState extends State<_TabHorario> {
       ..sort((a, b) {
         final byDay = a.dayOfWeek.compareTo(b.dayOfWeek);
         if (byDay != 0) return byDay;
+        final byShift = a.shift.index.compareTo(b.shift.index);
+        if (byShift != 0) return byShift;
         return a.startTime.compareTo(b.startTime);
       });
 
@@ -862,7 +939,13 @@ class _TabHorarioState extends State<_TabHorario> {
                 ('Tolerancia', 2),
                 ('Acciones', 1),
               ]),
-              ...turno.map((s) => _FranjaRow(slot: s, theme: theme, onDelete: () => _eliminarFranja(s))),
+              ...turno.map((s) => _FranjaRow(
+                    slot: s,
+                    theme: theme,
+                    onEdit: () => _editarFranja(s),
+                    onToggleActive: () => _toggleFranjaActive(s),
+                    onDelete: () => _eliminarFranja(s),
+                  )),
             ],
           ],
         ),
@@ -884,7 +967,7 @@ class _TabHorarioState extends State<_TabHorario> {
           ))),
           const SizedBox(height: 12),
         ],
-        _HorarioGrilla(periodos: periodosGrilla, materiasCurso: _materiasCurso, theme: theme, onDeletePeriodo: _eliminarPeriodo),
+        _HorarioGrilla(periodos: periodosGrilla, materiasCurso: _materiasCurso, theme: theme, onTapPeriodo: _onTapPeriodo),
         const SizedBox(height: 12),
         _LeyendaHorario(theme: theme),
       ]),
@@ -902,9 +985,11 @@ Color _shiftColor(ShiftType s) => switch (s) {
     };
 
 class _FranjaRow extends StatelessWidget {
-  const _FranjaRow({required this.slot, required this.theme, required this.onDelete});
+  const _FranjaRow({required this.slot, required this.theme, required this.onEdit, required this.onToggleActive, required this.onDelete});
   final TimeSlot slot;
   final AAMTheme theme;
+  final VoidCallback onEdit;
+  final VoidCallback onToggleActive;
   final VoidCallback onDelete;
 
   @override
@@ -923,18 +1008,25 @@ class _FranjaRow extends StatelessWidget {
         Expanded(flex: 2, child: Align(alignment: Alignment.center,
           child: AAMBadge(label: shiftTypeLabel(slot.shift), color: _shiftColor(slot.shift)))),
         Expanded(flex: 3, child: Align(alignment: Alignment.center, child: esCurricular
-          ? Text('Curricular', style: GoogleFonts.dmSans(fontSize: 13, color: theme.text))
+          ? Text('Curricular', style: GoogleFonts.dmSans(fontSize: 13, color: !slot.isActive ? theme.textSec : theme.text, decoration: !slot.isActive ? TextDecoration.lineThrough : null))
           : Row(mainAxisSize: MainAxisSize.min, children: [
-              Container(width: 8, height: 8, decoration: const BoxDecoration(color: AAMColors.teal, shape: BoxShape.circle)),
+              Container(width: 8, height: 8, decoration: BoxDecoration(color: !slot.isActive ? theme.borderCol : AAMColors.teal, shape: BoxShape.circle)),
               const SizedBox(width: 8),
-              Text(activityTypeLabel(slot.activityType), style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: theme.text)),
+              Text(activityTypeLabel(slot.activityType), style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: !slot.isActive ? theme.textSec : theme.text, decoration: !slot.isActive ? TextDecoration.lineThrough : null)),
             ]))),
         Expanded(flex: 2, child: Text(
           slot.lateToleranceMinutes > 0 ? '${slot.lateToleranceMinutes} min' : '—',
           textAlign: TextAlign.center,
-          style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
+          style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec, decoration: !slot.isActive ? TextDecoration.lineThrough : null),
         )),
-        Expanded(flex: 1, child: Center(child: GestureDetector(onTap: onDelete, child: const Icon(Icons.delete_outline, size: 18, color: AAMColors.danger)))),
+        Expanded(flex: 2, child: Center(child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GestureDetector(onTap: onEdit, child: const Icon(Icons.edit_outlined, size: 18, color: AAMColors.primary)),
+            const SizedBox(width: 12),
+            GestureDetector(onTap: onToggleActive, child: Icon(slot.isActive ? Icons.toggle_on : Icons.toggle_off, size: 22, color: slot.isActive ? AAMColors.success : theme.textSec)),
+          ],
+        ))),
       ]),
     );
   }
@@ -944,23 +1036,22 @@ class _FranjaRow extends StatelessWidget {
 /// y el profesor a cargo (nunca un bloque genérico). Curriculares +
 /// contraturno del grupo de taller activo, ya combinados por el caller.
 class _HorarioGrilla extends StatelessWidget {
-  const _HorarioGrilla({required this.periodos, required this.materiasCurso, required this.theme, required this.onDeletePeriodo});
+  const _HorarioGrilla({required this.periodos, required this.materiasCurso, required this.theme, required this.onTapPeriodo});
   final List<ClassPeriod> periodos;
   final List<SubjectTeacherAssignment> materiasCurso;
   final AAMTheme theme;
-  final ValueChanged<ClassPeriod> onDeletePeriodo;
+  final ValueChanged<ClassPeriod> onTapPeriodo;
 
-  static const List<String> _dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+  static const List<String> _dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
   bool _esSuplente(ClassPeriod p) {
     if (p.periodType != PeriodType.lesson || p.teacherId == null || p.subjectId == null) return false;
-    SubjectTeacherAssignment? titular;
     try {
-      titular = materiasCurso.firstWhere((m) => m.subjectId == p.subjectId);
+      final titular = materiasCurso.firstWhere((m) => m.subjectId == p.subjectId);
+      return titular.teacherId != p.teacherId;
     } catch (_) {
       return false;
     }
-    return titular.teacherId != p.teacherId;
   }
 
   List<(ClockTime, ClockTime)> get _franjas {
@@ -981,53 +1072,63 @@ class _HorarioGrilla extends StatelessWidget {
     final franjas = _franjas;
     if (franjas.isEmpty) {
       return Container(
+        width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 40),
         decoration: BoxDecoration(color: theme.card, border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(16)),
         child: Center(child: Text('Sin horario detallado cargado.', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec))),
       );
     }
 
-    const double colW = 160;
     const double hdrH = 40;
 
-    return Container(
-      decoration: BoxDecoration(color: theme.card, border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(16)),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(
-            width: 60 + colW * _dias.length,
-            child: Column(children: [
-              Container(
-                height: hdrH,
-                color: theme.surfaceCol,
-                child: Row(children: [
-                  const SizedBox(width: 60),
-                  ..._dias.map((d) => SizedBox(
-                        width: colW,
-                        child: Center(child: Text(d, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: theme.text))),
-                      )),
-                ]),
-              ),
-              Divider(height: 1, color: theme.borderCol),
-              ...franjas.map((franja) {
-                final (start, end) = franja;
-                return Container(
-                  decoration: BoxDecoration(border: Border(bottom: BorderSide(color: theme.borderCol, width: 1))),
-                  child: IntrinsicHeight(
-                    child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      SizedBox(width: 60, child: Center(child: Text(start.label, style: GoogleFonts.dmSans(fontSize: 10, color: theme.textSec)))),
-                      for (var dow = 1; dow <= _dias.length; dow++)
-                        SizedBox(width: colW, child: _celda(_en(dow, start, end))),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double availableDaysWidth = constraints.maxWidth - 60;
+        final double colW = (availableDaysWidth / _dias.length) > 160 
+            ? (availableDaysWidth / _dias.length) 
+            : 160.0;
+
+        return Container(
+          width: double.infinity,
+          decoration: BoxDecoration(color: theme.card, border: Border.all(color: theme.borderCol), borderRadius: BorderRadius.circular(16)),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: 60 + colW * _dias.length,
+                child: Column(children: [
+                  Container(
+                    height: hdrH,
+                    color: theme.surfaceCol,
+                    child: Row(children: [
+                      const SizedBox(width: 60),
+                      ..._dias.map((d) => SizedBox(
+                            width: colW,
+                            child: Center(child: Text(d, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: theme.text))),
+                          )),
                     ]),
                   ),
-                );
-              }),
-            ]),
+                  Divider(height: 1, color: theme.borderCol),
+                  ...franjas.map((franja) {
+                    final (start, end) = franja;
+                    return Container(
+                      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: theme.borderCol, width: 1))),
+                      child: IntrinsicHeight(
+                        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                          SizedBox(width: 60, child: Center(child: Text(start.label, style: GoogleFonts.dmSans(fontSize: 10, color: theme.textSec)))),
+                          for (var dow = 1; dow <= _dias.length; dow++)
+                            SizedBox(width: colW, child: _celda(_en(dow, start, end))),
+                        ]),
+                      ),
+                    );
+                  }),
+                ]),
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -1038,7 +1139,7 @@ class _HorarioGrilla extends StatelessWidget {
 
   Widget _celdaPeriodo(ClassPeriod p) {
     return GestureDetector(
-      onTap: () => onDeletePeriodo(p),
+      onTap: () => onTapPeriodo(p),
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         child: switch (p.periodType) {
@@ -1145,9 +1246,10 @@ class _LeyendaHorario extends StatelessWidget {
 
 // ─── Alta de franja (turno principal) ───────────────────────────────────────
 class _NuevaFranjaForm extends StatefulWidget {
-  const _NuevaFranjaForm({required this.ds, required this.courseId});
+  const _NuevaFranjaForm({required this.ds, required this.courseId, this.franjaExistente});
   final ApiDatasource ds;
   final String courseId;
+  final TimeSlot? franjaExistente;
 
   @override
   State<_NuevaFranjaForm> createState() => _NuevaFranjaFormState();
@@ -1163,6 +1265,20 @@ class _NuevaFranjaFormState extends State<_NuevaFranjaForm> {
 
   bool _submitting = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.franjaExistente != null) {
+      final slot = widget.franjaExistente!;
+      _shift = slot.shift;
+      _activityType = slot.activityType;
+      _dayOfWeek = slot.dayOfWeek;
+      _start = slot.startTime;
+      _end = slot.endTime;
+      _toleranciaCtrl.text = slot.lateToleranceMinutes.toString();
+    }
+  }
 
   @override
   void dispose() {
@@ -1199,15 +1315,28 @@ class _NuevaFranjaFormState extends State<_NuevaFranjaForm> {
       _error = null;
     });
     try {
-      await widget.ds.crearTimeSlotDeCurso(
-        courseId: widget.courseId,
-        shift: _shift,
-        activityType: _activityType,
-        dayOfWeek: _dayOfWeek!,
-        startTime: _start!,
-        endTime: _end!,
-        lateToleranceMinutes: tolerancia,
-      );
+      if (widget.franjaExistente != null) {
+        await widget.ds.actualizarTimeSlotDeCurso(
+          courseId: widget.courseId,
+          slotId: widget.franjaExistente!.id,
+          shift: _shift,
+          activityType: _activityType,
+          dayOfWeek: _dayOfWeek!,
+          startTime: _start!,
+          endTime: _end!,
+          lateToleranceMinutes: tolerancia,
+        );
+      } else {
+        await widget.ds.crearTimeSlotDeCurso(
+          courseId: widget.courseId,
+          shift: _shift,
+          activityType: _activityType,
+          dayOfWeek: _dayOfWeek!,
+          startTime: _start!,
+          endTime: _end!,
+          lateToleranceMinutes: tolerancia,
+        );
+      }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -1222,12 +1351,12 @@ class _NuevaFranjaFormState extends State<_NuevaFranjaForm> {
     return AAMFormDialog(
       theme: theme,
       icon: Icons.schedule_outlined,
-      titulo: 'Nuevo horario',
+      titulo: widget.franjaExistente != null ? 'Editar horario' : 'Nuevo horario',
       error: _error,
       submitting: _submitting,
       onCancel: () => Navigator.of(context).pop(false),
       onSubmit: _submit,
-      submitLabel: 'Crear horario',
+      submitLabel: widget.franjaExistente != null ? 'Guardar cambios' : 'Crear horario',
       children: [
         Row(children: [
           Expanded(child: AAMLabeledDropdown<int>(
@@ -1262,7 +1391,7 @@ class _NuevaFranjaFormState extends State<_NuevaFranjaForm> {
   }
 }
 
-// ─── Alta de período (horario detallado) ────────────────────────────────────
+// ─── Alta de período (horario detallado) ───────────────────────────────────
 class _NuevoPeriodoForm extends StatefulWidget {
   const _NuevoPeriodoForm({
     required this.ds,
@@ -1270,12 +1399,14 @@ class _NuevoPeriodoForm extends StatefulWidget {
     required this.materias,
     required this.grupos,
     required this.profesores,
+    this.periodoExistente,
   });
   final ApiDatasource ds;
   final String courseId;
   final List<SubjectTeacherAssignment> materias;
   final List<WorkshopGroup> grupos;
   final List<Teacher> profesores;
+  final ClassPeriod? periodoExistente;
 
   @override
   State<_NuevoPeriodoForm> createState() => _NuevoPeriodoFormState();
@@ -1290,6 +1421,8 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
   bool _quintoModulo = false;
   SubjectTeacherAssignment? _materiaSel;
   Teacher? _profesorSel;
+  List<Teacher> _profesoresFiltrados = [];
+  bool _cargandoProfesores = false;
   // null = curricular (compartido por todos los grupos).
   WorkshopGroup? _grupoSel;
 
@@ -1297,10 +1430,41 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
   String? _error;
 
   // El trigger de la DB rechaza una materia curricular en un período de
+  // El trigger de la DB rechaza una materia curricular en un período de
   // taller y viceversa — filtramos acá para no ofrecer algo que se vaya a
   // rechazar al guardar. Curricular = alcance "todo el curso"; taller =
   // alcance de un grupo puntual.
   SubjectType get _tipoEsperado => _grupoSel == null ? SubjectType.curricular : SubjectType.workshop;
+
+  @override
+  void initState() {
+    super.initState();
+    _profesoresFiltrados = widget.profesores;
+    if (widget.periodoExistente != null) {
+      final p = widget.periodoExistente!;
+      _dayOfWeek = p.dayOfWeek;
+      _shift = p.shift;
+      _periodType = p.periodType;
+      _start = p.startTime;
+      _end = p.endTime;
+      _quintoModulo = p.isFifthModule;
+      if (p.workshopGroupId != null) {
+        try {
+          _grupoSel = widget.grupos.firstWhere((g) => g.id == p.workshopGroupId);
+        } catch (_) {}
+      }
+      if (p.subjectId != null) {
+        try {
+          _materiaSel = widget.materias.firstWhere((m) => m.subjectId == p.subjectId);
+        } catch (_) {}
+      }
+      if (p.teacherId != null) {
+        try {
+          _profesorSel = widget.profesores.firstWhere((t) => t.id == p.teacherId);
+        } catch (_) {}
+      }
+    }
+  }
 
   List<SubjectTeacherAssignment> get _materiasFiltradas =>
       widget.materias.where((m) => m.subjectType == _tipoEsperado).toList();
@@ -1327,19 +1491,41 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
     if (t != null) setState(() => _end = t);
   }
 
-  void _onMateriaChanged(SubjectTeacherAssignment? m) {
+  void _onMateriaChanged(SubjectTeacherAssignment? m) async {
     setState(() {
       _materiaSel = m;
       if (m == null) {
         _profesorSel = null;
-        return;
-      }
-      try {
-        _profesorSel = widget.profesores.firstWhere((p) => p.id == m.teacherId);
-      } catch (_) {
-        _profesorSel = null;
+        _profesoresFiltrados = widget.profesores;
       }
     });
+    if (m != null) {
+      setState(() => _cargandoProfesores = true);
+      try {
+        final profs = await widget.ds.getTeachers(subjectId: m.subjectId);
+        if (!mounted) return;
+        setState(() {
+          _profesoresFiltrados = profs;
+          try {
+            _profesorSel = profs.firstWhere((p) => p.id == m.teacherId);
+          } catch (_) {
+            _profesorSel = null;
+          }
+        });
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _profesoresFiltrados = widget.profesores;
+          try {
+            _profesorSel = widget.profesores.firstWhere((p) => p.id == m.teacherId);
+          } catch (_) {
+            _profesorSel = null;
+          }
+        });
+      } finally {
+        if (mounted) setState(() => _cargandoProfesores = false);
+      }
+    }
   }
 
   Future<void> _submit() async {
@@ -1364,6 +1550,9 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
       _error = null;
     });
     try {
+      if (widget.periodoExistente != null) {
+        await widget.ds.eliminarClassPeriod(widget.courseId, widget.periodoExistente!.id);
+      }
       await widget.ds.crearClassPeriod(
         courseId: widget.courseId,
         dayOfWeek: _dayOfWeek!,
@@ -1464,14 +1653,17 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
               onChanged: _onMateriaChanged,
             ),
           const SizedBox(height: 16),
-          AAMLabeledDropdown<Teacher>(
-            label: 'Profesor a cargo (cambiá acá si es un reemplazo puntual)',
-            value: _profesorSel,
-            options: widget.profesores,
-            hint: 'Profesor',
-            itemLabel: (p) => p.fullName,
-            onChanged: (v) => setState(() => _profesorSel = v),
-          ),
+          if (_cargandoProfesores)
+            const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(strokeWidth: 2, color: AAMColors.primary)))
+          else
+            AAMLabeledDropdown<Teacher>(
+              label: 'Profesor a cargo (cambiá acá si es un reemplazo puntual)',
+              value: _profesorSel,
+              options: _profesoresFiltrados,
+              hint: 'Profesor',
+              itemLabel: (p) => p.fullName,
+              onChanged: (v) => setState(() => _profesorSel = v),
+            ),
         ],
         const SizedBox(height: 16),
         Row(children: [
@@ -1484,7 +1676,7 @@ class _NuevoPeriodoFormState extends State<_NuevoPeriodoForm> {
   }
 }
 
-// ─── Tab: Materias y profesores ─────────────────────────────────────────────
+// ─── Tab: Materias y profesores ───────────────────────────────────────────
 class _TabMaterias extends StatefulWidget {
   const _TabMaterias({required this.curso, required this.ds});
   final Course curso;
@@ -1803,7 +1995,7 @@ class _NuevoProfesorDialogState extends State<_NuevoProfesorDialog> {
   }
 }
 
-// ─── Tab: Preceptores ────────────────────────────────────────────────────────
+// ─── Tab: Preceptores ───────────────────────────────────────────────────────
 class _TabPreceptores extends StatefulWidget {
   const _TabPreceptores({required this.curso, required this.ds});
   final Course curso;
@@ -1871,13 +2063,13 @@ class _TabPreceptoresState extends State<_TabPreceptores> {
     if (result == true) _cargar();
   }
 
-  Future<void> _quitarPermanente(ShiftType shift) async {
+  Future<void> _quitarPermanente(CoursePreceptor assignment) async {
     final ok = await showAamConfirmDialog(context,
         titulo: 'Quitar preceptor',
-        mensaje: '¿Quitar el preceptor a cargo del turno ${shiftTypeLabel(shift)}?');
+        mensaje: '¿Quitar a ${assignment.preceptorName} del día ${_diaLabel(assignment.dayOfWeek)}?');
     if (!ok) return;
     try {
-      await widget.ds.quitarCoursePreceptor(widget.curso.id, shift);
+      await widget.ds.quitarCoursePreceptor(widget.curso.id, assignment.id);
       _cargar();
     } catch (_) {
       if (mounted) setState(() => _error = 'No se pudo quitar el preceptor.');
@@ -1898,6 +2090,7 @@ class _TabPreceptoresState extends State<_TabPreceptores> {
         turnos: _turnosDelCurso,
         preceptores: _preceptoresDisponibles,
         usuarios: _usuarios,
+        permanentes: _permanentes,
       ),
     );
     if (result == true) _cargar();
@@ -1906,7 +2099,7 @@ class _TabPreceptoresState extends State<_TabPreceptores> {
   Future<void> _eliminarTemporal(CoursePreceptorTempAssignment t) async {
     final ok = await showAamConfirmDialog(context,
         titulo: 'Eliminar reemplazo temporal',
-        mensaje: '¿Eliminar el reemplazo de ${t.preceptorName} (${t.startDate.day}/${t.startDate.month}–${t.endDate.day}/${t.endDate.month})?');
+        mensaje: '¿Eliminar el reemplazo de ${t.preceptorName} (${t.startDate.day}/${t.startDate.month}â€“${t.endDate.day}/${t.endDate.month})?');
     if (!ok) return;
     try {
       await widget.ds.eliminarCoursePreceptorTempAssignment(widget.curso.id, t.id);
@@ -1933,20 +2126,48 @@ class _TabPreceptoresState extends State<_TabPreceptores> {
           _EmptyRow(theme: theme, mensaje: 'Cargá el turno principal del curso para poder asignar preceptores.')
         else
           ..._turnosDelCurso.map((shift) {
-            CoursePreceptor? actual;
-            try {
-              actual = _permanentes.firstWhere((p) => p.shift == shift);
-            } catch (_) {
-              actual = null;
-            }
+            final asignaciones = _permanentes.where((p) => p.shift == shift).toList();
             return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _PreceptorPermanenteRow(
-                shift: shift,
-                actual: actual,
-                theme: theme,
-                onAsignar: () => _asignarPermanente(shift),
-                onQuitar: actual == null ? null : () => _quitarPermanente(shift),
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Container(
+                decoration: BoxDecoration(color: theme.surfaceCol, borderRadius: BorderRadius.circular(12), border: Border.all(color: theme.borderCol)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: theme.borderCol))),
+                      child: Row(
+                        children: [
+                          Expanded(child: Text('Turno ${shiftTypeLabel(shift)}', style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: theme.text))),
+                          _DashedButton(label: 'Asignar preceptor', onTap: () => _asignarPermanente(shift)),
+                        ],
+                      ),
+                    ),
+                    if (asignaciones.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Text('Sin preceptores asignados.', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
+                      )
+                    else
+                      ...() {
+                        final map = <String, List<CoursePreceptor>>{};
+                        for (final a in asignaciones) {
+                          map.putIfAbsent(a.preceptorId, () => []).add(a);
+                        }
+                        return map.values.map((assignments) {
+                          final activo = !_temporales.any((t) => t.shift == shift);
+                          return _PreceptorPermanenteRow(
+                            shift: shift,
+                            assignments: assignments,
+                            activo: activo,
+                            theme: theme,
+                            onQuitarDia: _quitarPermanente,
+                          );
+                        });
+                      }(),
+                  ],
+                ),
               ),
             );
           }),
@@ -1969,34 +2190,57 @@ class _TabPreceptoresState extends State<_TabPreceptores> {
 }
 
 class _PreceptorPermanenteRow extends StatelessWidget {
-  const _PreceptorPermanenteRow({required this.shift, required this.actual, required this.theme, required this.onAsignar, this.onQuitar});
+  const _PreceptorPermanenteRow({required this.shift, required this.assignments, required this.activo, required this.theme, required this.onQuitarDia});
   final ShiftType shift;
-  final CoursePreceptor? actual;
+  final List<CoursePreceptor> assignments;
+  final bool activo;
   final AAMTheme theme;
-  final VoidCallback onAsignar;
-  final VoidCallback? onQuitar;
+  final void Function(CoursePreceptor) onQuitarDia;
 
   @override
   Widget build(BuildContext context) {
+    final actual = assignments.first;
+    final sorted = List<CoursePreceptor>.from(assignments)..sort((a, b) => a.dayOfWeek.compareTo(b.dayOfWeek));
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(color: theme.surfaceCol, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: theme.borderCol))),
       child: Row(children: [
-        _InitialsAvatar(text: actual?.preceptorName ?? '?', color: avatarColorFor(actual?.preceptorName ?? shift.name), size: 36),
+        _InitialsAvatar(text: actual.preceptorName, color: avatarColorFor(actual.preceptorName), size: 36),
         const SizedBox(width: 14),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(actual?.preceptorName ?? 'Sin asignar',
-              style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: actual == null ? theme.textSec : theme.text)),
-          Text(actual == null ? 'Sin preceptor a cargo' : 'A cargo desde el inicio del año lectivo',
-              style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec)),
+          Row(
+            children: [
+              Text(actual.preceptorName, style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: theme.text)),
+              const SizedBox(width: 8),
+              AAMBadge(label: activo ? 'Activo' : 'Reemplazado', color: activo ? AAMColors.success : AAMColors.warning),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: sorted.map((a) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: theme.surfaceCol,
+                border: Border.all(color: theme.borderCol),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_diaLabel(a.dayOfWeek), style: GoogleFonts.dmSans(fontSize: 11, color: theme.textSec)),
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    onTap: () => onQuitarDia(a),
+                    child: const Icon(Icons.close, size: 12, color: AAMColors.danger),
+                  )
+                ],
+              ),
+            )).toList(),
+          ),
         ])),
-        AAMBadge(label: shiftTypeLabel(shift), color: AAMColors.info),
-        const SizedBox(width: 12),
-        GestureDetector(onTap: onAsignar, child: Icon(actual == null ? Icons.add_circle_outline : Icons.edit_outlined, size: 18, color: AAMColors.accent)),
-        if (onQuitar != null) ...[
-          const SizedBox(width: 10),
-          GestureDetector(onTap: onQuitar, child: const Icon(Icons.delete_outline, size: 18, color: AAMColors.danger)),
-        ],
       ]),
     );
   }
@@ -2026,7 +2270,7 @@ class _ReemplazoRow extends StatelessWidget {
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(asignacion.preceptorName, style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: theme.text)),
             Text(
-              '${asignacion.reason?.isNotEmpty == true ? '${asignacion.reason} · ' : ''}${shiftTypeLabel(asignacion.shift)}',
+              '${asignacion.reason?.isNotEmpty == true ? '${asignacion.reason} Â· ' : ''}${shiftTypeLabel(asignacion.shift)}',
               style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec),
             ),
           ])),
@@ -2063,6 +2307,7 @@ class _AsignarPreceptorForm extends StatefulWidget {
 
 class _AsignarPreceptorFormState extends State<_AsignarPreceptorForm> {
   User? _preceptorSel;
+  final Set<int> _diasSel = {1, 2, 3, 4, 5}; // Default Mon-Fri
   bool _submitting = false;
   String? _error;
 
@@ -2071,12 +2316,23 @@ class _AsignarPreceptorFormState extends State<_AsignarPreceptorForm> {
       setState(() => _error = 'Seleccioná el preceptor.');
       return;
     }
+    if (_diasSel.isEmpty) {
+      setState(() => _error = 'Seleccioná al menos un día.');
+      return;
+    }
     setState(() {
       _submitting = true;
       _error = null;
     });
     try {
-      await widget.ds.asignarCoursePreceptor(courseId: widget.courseId, shift: widget.shift, preceptorId: _preceptorSel!.id);
+      for (final dia in _diasSel) {
+        await widget.ds.asignarCoursePreceptor(
+          courseId: widget.courseId,
+          shift: widget.shift,
+          preceptorId: _preceptorSel!.id,
+          dayOfWeek: dia,
+        );
+      }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -2106,18 +2362,46 @@ class _AsignarPreceptorFormState extends State<_AsignarPreceptorForm> {
           itemLabel: (u) => u.fullName,
           onChanged: (v) => setState(() => _preceptorSel = v),
         ),
+        const SizedBox(height: 16),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Días asignados', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: theme.text)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [1, 2, 3, 4, 5].map((d) {
+                final isSelected = _diasSel.contains(d);
+                return FilterChip(
+                  label: Text(_diaLabel(d), style: GoogleFonts.dmSans(fontSize: 13, color: isSelected ? AAMColors.primary : theme.text)),
+                  selected: isSelected,
+                  onSelected: (val) => setState(() => val ? _diasSel.add(d) : _diasSel.remove(d)),
+                  selectedColor: AAMColors.primary.withAlpha((0.12 * 255).round()),
+                  checkmarkColor: AAMColors.primary,
+                  backgroundColor: theme.card,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(color: isSelected ? AAMColors.primary : theme.borderCol),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
       ],
     );
   }
 }
 
 class _NuevoReemplazoForm extends StatefulWidget {
-  const _NuevoReemplazoForm({required this.ds, required this.courseId, required this.turnos, required this.preceptores, required this.usuarios});
+  const _NuevoReemplazoForm({required this.ds, required this.courseId, required this.turnos, required this.preceptores, required this.usuarios, required this.permanentes});
   final ApiDatasource ds;
   final String courseId;
   final List<ShiftType> turnos;
   final List<User> preceptores;
   final List<User> usuarios;
+  final List<CoursePreceptor> permanentes;
 
   @override
   State<_NuevoReemplazoForm> createState() => _NuevoReemplazoFormState();
@@ -2147,6 +2431,12 @@ class _NuevoReemplazoFormState extends State<_NuevoReemplazoForm> {
   }
 
   DateTime? get _maxEnd => _start == null ? null : addOneCalendarMonth(_start!);
+
+  List<User> get _preceptoresFiltrados {
+    if (_shift == null) return widget.preceptores;
+    final titularesIds = widget.permanentes.where((p) => p.shift == _shift).map((p) => p.preceptorId).toSet();
+    return widget.preceptores.where((p) => !titularesIds.contains(p.id)).toList();
+  }
 
   String? get _rangoError {
     if (_start == null || _end == null) return null;
@@ -2260,7 +2550,7 @@ class _NuevoReemplazoFormState extends State<_NuevoReemplazoForm> {
   }
 }
 
-// ─── Helpers compartidos ─────────────────────────────────────────────────────
+// ─── Helpers compartidos ────────────────────────────────────────────────────
 
 const List<String> _diasLabels = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 String _diaLabel(int d) => (d >= 1 && d <= 7) ? _diasLabels[d - 1] : 'Día $d';
@@ -2420,7 +2710,7 @@ class _InitialsAvatar extends StatelessWidget {
   }
 }
 
-// ─── Borde punteado (afordancia de "agregar", según mockups) ───────────────
+// ─── Borde punteado (afordancia de "agregar", según mockups) ────────────────
 class _DashedRRectPainter extends CustomPainter {
   _DashedRRectPainter({required this.color, required this.radius});
   final Color color;
@@ -2558,3 +2848,75 @@ class _EmptyRow extends StatelessWidget {
   }
 }
 
+class _DetalleMateriaModal extends StatelessWidget {
+  const _DetalleMateriaModal({required this.periodo, required this.esSuplente});
+  final ClassPeriod periodo;
+  final bool esSuplente;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AAMTheme();
+    return AlertDialog(
+      backgroundColor: theme.surfaceCol,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text('Detalle de clase', style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w700, color: theme.text)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Materia: ${periodo.subjectName ?? '—'}', style: GoogleFonts.dmSans(fontSize: 14, color: theme.text)),
+          const SizedBox(height: 8),
+          Text('Profesor: ${periodo.teacherName ?? '—'}${esSuplente ? ' (Suplente)' : ''}', style: GoogleFonts.dmSans(fontSize: 14, color: theme.text)),
+          const SizedBox(height: 8),
+          Text('Horario: ${_diaLabel(periodo.dayOfWeek)} ${periodo.startTime.label} – ${periodo.endTime.label}', style: GoogleFonts.dmSans(fontSize: 14, color: theme.text)),
+          if (periodo.isFifthModule) ...[
+            const SizedBox(height: 8),
+            Text('5to módulo', style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: AAMColors.violet)),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop('delete'),
+          child: Text('Eliminar', style: GoogleFonts.dmSans(fontWeight: FontWeight.w700, color: AAMColors.danger)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop('edit'),
+          child: Text('Editar', style: GoogleFonts.dmSans(fontWeight: FontWeight.w700, color: AAMColors.primary)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text('Cerrar', style: GoogleFonts.dmSans(fontWeight: FontWeight.w700, color: theme.textSec)),
+        ),
+      ],
+    );
+  }
+}
+
+class _DetalleRecreoModal extends StatelessWidget {
+  const _DetalleRecreoModal({required this.periodo});
+  final ClassPeriod periodo;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AAMTheme();
+    return AlertDialog(
+      backgroundColor: theme.surfaceCol,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text('Detalle de ${periodTypeLabel(periodo.periodType).toLowerCase()}', style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w700, color: theme.text)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Horario: ${_diaLabel(periodo.dayOfWeek)} ${periodo.startTime.label} – ${periodo.endTime.label}', style: GoogleFonts.dmSans(fontSize: 14, color: theme.text)),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text('Cerrar', style: GoogleFonts.dmSans(fontWeight: FontWeight.w700, color: theme.textSec)),
+        ),
+      ],
+    );
+  }
+}

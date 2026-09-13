@@ -45,6 +45,7 @@ DROP TABLE IF EXISTS
     time_slots,
     shift_breaks,
     shifts_config,
+    teacher_subjects,
     course_subject_teachers,
     teachers,
     subject_applicability,
@@ -428,6 +429,17 @@ CREATE TABLE teachers (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- teacher_subjects: qué materias puede dictar cada profesor. Se usa para
+-- filtrar el select de profesores al asignar una materia a un curso — solo
+-- muestra los habilitados para esa materia puntual.
+CREATE TABLE teacher_subjects (
+    teacher_id  UUID NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
+    subject_id  UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    PRIMARY KEY (teacher_id, subject_id)
+);
+
+CREATE INDEX idx_teacher_subjects_subject ON teacher_subjects(subject_id);
+
 CREATE TABLE course_subject_teachers (
     course_id       UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     subject_id      UUID NOT NULL REFERENCES subjects(id),
@@ -480,6 +492,7 @@ CREATE TABLE time_slots (
     start_time      TIME NOT NULL,
     end_time        TIME NOT NULL,
     late_tolerance_minutes INTEGER NOT NULL DEFAULT 0,
+    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     CHECK (end_time > start_time),
     CHECK (
@@ -654,11 +667,18 @@ CREATE TABLE repeating_student_links (
 -- preceptor <-> course assignment and favorites
 -- ---------------------------------------------------------------------
 
+-- Múltiples preceptores permanentes por turno, cada uno con los días de la
+-- semana que le tocan. UNIQUE (course_id, shift, day_of_week) garantiza un
+-- solo preceptor por día dentro de un mismo curso+turno; el mismo día SÍ
+-- puede repetirse entre turnos distintos (morning y afternoon) porque shift
+-- es parte de la clave.
 CREATE TABLE course_preceptors (
-    course_id       UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-    shift           shift_type NOT NULL,
-    preceptor_id    UUID NOT NULL REFERENCES users(id),
-    PRIMARY KEY (course_id, shift)
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_id     UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    shift         shift_type NOT NULL,
+    preceptor_id  UUID NOT NULL REFERENCES users(id),
+    day_of_week   SMALLINT NOT NULL CHECK (day_of_week BETWEEN 1 AND 7),
+    UNIQUE (course_id, shift, day_of_week)  -- un solo preceptor por día
 );
 
 CREATE TABLE course_preceptor_temp_assignments (
@@ -853,9 +873,29 @@ INSERT INTO nfc_bracelets (nfc_uid, student_id, assigned_by, is_active) VALUES
 INSERT INTO repeating_student_links (student_id, previous_course_id, current_course_id) VALUES
     ('70000000-0000-0000-0000-000000000003', '30000000-0000-0000-0000-000000000003', '30000000-0000-0000-0000-000000000004');
 
-INSERT INTO course_preceptors (course_id, shift, preceptor_id) VALUES
-    ('30000000-0000-0000-0000-000000000001', 'morning', '00000000-0000-0000-0000-000000000003'),
-    ('30000000-0000-0000-0000-000000000005', 'morning', '00000000-0000-0000-0000-000000000004');
+-- Preceptores permanentes con días asignados (nuevo schema).
+-- Ana Preceptora cubre 1ro 1ra mañana, lunes a viernes.
+-- Luis Preceptor cubre 4to 1ra mañana, lunes a viernes.
+INSERT INTO course_preceptors (course_id, shift, preceptor_id, day_of_week) VALUES
+    ('30000000-0000-0000-0000-000000000001', 'morning', '00000000-0000-0000-0000-000000000003', 1),
+    ('30000000-0000-0000-0000-000000000001', 'morning', '00000000-0000-0000-0000-000000000003', 2),
+    ('30000000-0000-0000-0000-000000000001', 'morning', '00000000-0000-0000-0000-000000000003', 3),
+    ('30000000-0000-0000-0000-000000000001', 'morning', '00000000-0000-0000-0000-000000000003', 4),
+    ('30000000-0000-0000-0000-000000000001', 'morning', '00000000-0000-0000-0000-000000000003', 5),
+    ('30000000-0000-0000-0000-000000000005', 'morning', '00000000-0000-0000-0000-000000000004', 1),
+    ('30000000-0000-0000-0000-000000000005', 'morning', '00000000-0000-0000-0000-000000000004', 2),
+    ('30000000-0000-0000-0000-000000000005', 'morning', '00000000-0000-0000-0000-000000000004', 3),
+    ('30000000-0000-0000-0000-000000000005', 'morning', '00000000-0000-0000-0000-000000000004', 4),
+    ('30000000-0000-0000-0000-000000000005', 'morning', '00000000-0000-0000-0000-000000000004', 5);
+
+-- teacher_subjects seed: Carlos Gómez puede dar Matemática; Marina Ruiz
+-- puede dar Lengua y Literatura; Diego Fernández puede dar Programación I
+-- y Electrónica Aplicada.
+INSERT INTO teacher_subjects (teacher_id, subject_id) VALUES
+    ('60000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000001'),
+    ('60000000-0000-0000-0000-000000000002', '50000000-0000-0000-0000-000000000002'),
+    ('60000000-0000-0000-0000-000000000003', '50000000-0000-0000-0000-000000000004'),
+    ('60000000-0000-0000-0000-000000000003', '50000000-0000-0000-0000-000000000005');
 
 INSERT INTO course_preceptor_temp_assignments (course_id, shift, preceptor_id, start_date, end_date, reason, created_by) VALUES
     ('30000000-0000-0000-0000-000000000001', 'morning', '00000000-0000-0000-0000-000000000004',
