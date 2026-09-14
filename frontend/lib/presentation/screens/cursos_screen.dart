@@ -161,19 +161,36 @@ class _CursosScreenState extends State<CursosScreen> with AutoRefreshMixin<Curso
       _buildFiltros(theme),
       const SizedBox(height: 20),
       Expanded(
-        child: SingleChildScrollView(
-          child: Wrap(
-            spacing: 16,
-            runSpacing: 16,
-            children: [
-              ...cursos.map((c) => _CursoCard(
-                    curso: c,
-                    theme: theme,
-                    onTap: () => setState(() => _seleccionado = c),
-                  )),
-              _NuevoCursoCard(theme: theme, onTap: _abrirNuevoCurso),
-            ],
-          ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Ancho de tarjeta dinámico en vez de un 240 fijo: con un ancho
+            // fijo, Wrap encaja las columnas que entran y deja el resto del
+            // ancho disponible como espacio muerto a la derecha (más notorio
+            // cuanto más ancha la ventana). Calculamos cuántas columnas de
+            // ~240px entran y estiramos cada tarjeta para que esas columnas
+            // llenen el ancho exacto, con el mismo margen a los dos lados.
+            const spacing = 16.0;
+            const minCardWidth = 240.0;
+            final crossAxisCount = ((constraints.maxWidth + spacing) / (minCardWidth + spacing))
+                .floor()
+                .clamp(1, 100);
+            final cardWidth = (constraints.maxWidth - (crossAxisCount - 1) * spacing) / crossAxisCount;
+            return SingleChildScrollView(
+              child: Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: [
+                  _NuevoCursoCard(theme: theme, width: cardWidth, onTap: _abrirNuevoCurso),
+                  ...cursos.map((c) => _CursoCard(
+                        curso: c,
+                        theme: theme,
+                        width: cardWidth,
+                        onTap: () => setState(() => _seleccionado = c),
+                      )),
+                ],
+              ),
+            );
+          },
         ),
       ),
     ]);
@@ -268,9 +285,10 @@ class _CursosScreenState extends State<CursosScreen> with AutoRefreshMixin<Curso
 const double _kCourseCardHeight = 150;
 
 class _CursoCard extends StatefulWidget {
-  const _CursoCard({required this.curso, required this.theme, required this.onTap});
+  const _CursoCard({required this.curso, required this.theme, required this.width, required this.onTap});
   final Course curso;
   final AAMTheme theme;
+  final double width;
   final VoidCallback onTap;
 
   @override
@@ -293,7 +311,7 @@ class _CursoCardState extends State<_CursoCard> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
-          width: 240,
+          width: widget.width,
           height: _kCourseCardHeight,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -324,8 +342,9 @@ class _CursoCardState extends State<_CursoCard> {
 }
 
 class _NuevoCursoCard extends StatelessWidget {
-  const _NuevoCursoCard({required this.theme, required this.onTap});
+  const _NuevoCursoCard({required this.theme, required this.width, required this.onTap});
   final AAMTheme theme;
+  final double width;
   final VoidCallback onTap;
 
   @override
@@ -337,7 +356,7 @@ class _NuevoCursoCard extends StatelessWidget {
         child: CustomPaint(
           painter: _DashedRRectPainter(color: AAMColors.accent, radius: 16),
           child: SizedBox(
-            width: 240,
+            width: width,
             height: _kCourseCardHeight,
             child: Center(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -1043,6 +1062,8 @@ class _HorarioGrilla extends StatelessWidget {
   final ValueChanged<ClassPeriod> onTapPeriodo;
 
   static const List<String> _dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+  // Solo un piso de emergencia (ventanas angostísimas) — ver comentario en build().
+  static const double _kMinColW = 90.0;
 
   bool _esSuplente(ClassPeriod p) {
     if (p.periodType != PeriodType.lesson || p.teacherId == null || p.subjectId == null) return false;
@@ -1083,10 +1104,20 @@ class _HorarioGrilla extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        // Sin piso "duro": cualquier mínimo fijo (probamos 160 y 120) hace
+        // que la grilla sea más ANCHA o más ANGOSTA que el contenedor según
+        // el ancho de ventana — en un caso desborda por la derecha (come el
+        // padding derecho), en el otro sobra espacio a la derecha (el
+        // padding derecho queda más grande que el izquierdo). Usar siempre
+        // el ancho natural hace que la grilla llene el contenedor exacto,
+        // preservando el mismo padding a los dos lados en cualquier ventana
+        // razonable. `_kMinColW` solo evita columnas ilegibles en ventanas
+        // extremadamente angostas (ahí sí se acepta perder la simetría y
+        // scrollear horizontalmente).
         final double availableDaysWidth = constraints.maxWidth - 60;
-        final double colW = (availableDaysWidth / _dias.length) > 160 
-            ? (availableDaysWidth / _dias.length) 
-            : 160.0;
+        final double colW = (availableDaysWidth / _dias.length) > _kMinColW
+            ? (availableDaysWidth / _dias.length)
+            : _kMinColW;
 
         return Container(
           width: double.infinity,
