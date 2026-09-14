@@ -351,8 +351,23 @@ func (r *TeacherRepo) UpdateStatus(ctx context.Context, id string, status string
 }
 
 func (r *TeacherRepo) Delete(ctx context.Context, id string) (bool, error) {
+	// La UI oculta "Eliminar" hasta que el profesor está de baja, pero eso es
+	// solo cosmético — quien pegue directo a la API se saltaría el paso. El
+	// gate real tiene que vivir acá, mismo patrón que SubjectRepo.Delete.
+	var status string
+	err := r.pool.QueryRow(ctx, `SELECT status FROM teachers WHERE id = $1`, id).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, mapDBError(err, "Error al verificar el estado del profesor.")
+	}
+	if status != domain.TeacherStatusInactive {
+		return false, domain.NewDomainError("No se puede eliminar un profesor activo: dalo de baja primero.", 400)
+	}
+
 	var countCST int
-	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM course_subject_teachers WHERE teacher_id = $1`, id).Scan(&countCST)
+	err = r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM course_subject_teachers WHERE teacher_id = $1`, id).Scan(&countCST)
 	if err != nil {
 		return false, mapDBError(err, "Error al verificar dependencias del profesor.")
 	}

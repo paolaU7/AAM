@@ -412,10 +412,19 @@ class _ProfesorRowState extends State<_ProfesorRow> {
                     : Wrap(
                         alignment: WrapAlignment.center,
                         spacing: 6, runSpacing: 4,
-                        children: p.assignments.map((a) => _ShortCodeChip(
-                          shortCode: a.subjectShortCode.isEmpty ? a.subjectName : a.subjectShortCode,
-                          theme: widget.theme,
-                        )).toList(),
+                        // Un profesor puede dar la misma materia en varios
+                        // cursos (una fila de course_subject_teachers por
+                        // curso) — acá se resume por materia, no por curso,
+                        // así que se agrupa por subjectId para no repetir
+                        // el mismo chip ("M1r4t", "M1r4t", "M1r4t"...). El
+                        // detalle curso por curso está al hacer click.
+                        children: {for (final a in p.assignments) a.subjectId: a}
+                            .values
+                            .map((a) => _ShortCodeChip(
+                                  shortCode: a.subjectShortCode.isEmpty ? a.subjectName : a.subjectShortCode,
+                                  theme: widget.theme,
+                                ))
+                            .toList(),
                       ),
               ),
             ),
