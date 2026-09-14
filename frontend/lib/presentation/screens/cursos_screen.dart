@@ -2523,11 +2523,21 @@ class _NuevoReemplazoFormState extends State<_NuevoReemplazoForm> {
       children: [
         AAMLabeledDropdown<ShiftType>(
           label: 'Turno', value: _shift, options: widget.turnos,
-          hint: 'Turno', itemLabel: shiftTypeLabel, onChanged: (v) => setState(() => _shift = v),
+          hint: 'Turno', itemLabel: shiftTypeLabel,
+          onChanged: (v) => setState(() {
+            _shift = v;
+            // Si el preceptor elegido deja de estar disponible para el
+            // nuevo turno (por ej. porque ahora es el titular), hay que
+            // limpiar la selección — un AAMLabeledDropdown con un `value`
+            // que ya no está en `options` tira una excepción de Flutter.
+            if (_preceptorSel != null && !_preceptoresFiltrados.contains(_preceptorSel)) {
+              _preceptorSel = null;
+            }
+          }),
         ),
         const SizedBox(height: 16),
         AAMLabeledDropdown<User>(
-          label: 'Preceptor reemplazante', value: _preceptorSel, options: widget.preceptores,
+          label: 'Preceptor reemplazante', value: _preceptorSel, options: _preceptoresFiltrados,
           hint: 'Preceptor', itemLabel: (u) => u.fullName, onChanged: (v) => setState(() => _preceptorSel = v),
         ),
         const SizedBox(height: 16),

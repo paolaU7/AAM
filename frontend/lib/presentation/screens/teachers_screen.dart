@@ -692,6 +692,10 @@ class _AsignacionesModalState extends State<_AsignacionesModal> {
   bool _submitting = false;
   String? _error;
 
+  // Tarea 2: se pide año (+especialidad si es 4to o más) en vez de arrancar
+  // por un curso puntual — el curso queda como el último paso, ya acotado.
+  int? _gradeYear;
+  String? _specialtyId;
   Course? _cursoSel;
   Subject? _materiaSel;
 
@@ -720,30 +724,88 @@ class _AsignacionesModalState extends State<_AsignacionesModal> {
     }
   }
 
-  // Las materias ofrecidas dependen del curso elegido — solo lo habilitado
-  // para su año de cursada + especialidad (mismo filtro que en el horario
-  // de un curso; ver `_AsignarMateriaForm` en cursos_screen.dart).
-  Future<void> _onCursoChanged(Course? c) async {
+  // Años que realmente tienen algún curso cargado — no una lista fija 1-7,
+  // así no se ofrecen años sin cursos creados todavía.
+  List<int> get _aniosDisponibles {
+    final years = _cursos.map((c) => c.gradeYear).toSet().toList()..sort();
+    return years;
+  }
+
+  // 1ro a 3ro son Ciclo Básico — no tienen especialidad. Desde 4to sí.
+  bool get _requiereEspecialidad => (_gradeYear ?? 0) >= 4;
+
+  // Especialidades que existen PARA ESE año puntual (no todas las del
+  // sistema) — evita ofrecer una especialidad sin cursos en ese año.
+  List<MapEntry<String, String>> get _especialidadesDisponibles {
+    final byId = <String, String>{};
+    for (final c in _cursos) {
+      if (c.gradeYear == _gradeYear) byId[c.specialtyId] = c.specialtyName;
+    }
+    final list = byId.entries.toList()..sort((a, b) => a.value.compareTo(b.value));
+    return list;
+  }
+
+  // Divisiones concretas que matchean año(+especialidad) — de acá sale el
+  // curso puntual que finalmente recibe la fila en course_subject_teachers.
+  List<Course> get _cursosFiltrados {
+    return _cursos.where((c) {
+      if (c.gradeYear != _gradeYear) return false;
+      if (_requiereEspecialidad && c.specialtyId != _specialtyId) return false;
+      return true;
+    }).toList()
+      ..sort((a, b) => a.division.compareTo(b.division));
+  }
+
+  void _onAnioChanged(int? year) {
     setState(() {
-      _cursoSel = c;
+      _gradeYear = year;
+      _specialtyId = null;
+      _cursoSel = null;
       _materiaSel = null;
       _materiasDisponibles = [];
     });
-    if (c == null) return;
+    if (year != null && !_requiereEspecialidad) _cargarMaterias();
+  }
+
+  void _onEspecialidadChanged(String? specialtyId) {
+    setState(() {
+      _specialtyId = specialtyId;
+      _cursoSel = null;
+      _materiaSel = null;
+      _materiasDisponibles = [];
+    });
+    if (specialtyId != null) _cargarMaterias();
+  }
+
+  // Las materias ofrecidas se filtran contra subject_applicability para
+  // el año(+especialidad) elegidos — no se muestran todas las materias
+  // del sistema, solo las habilitadas para esa combinación.
+  Future<void> _cargarMaterias() async {
     setState(() => _materiasLoading = true);
     try {
-      final data = await widget.ds.getSubjects(gradeYear: c.gradeYear, specialtyId: c.specialtyId);
+      final data = await widget.ds.getSubjects(
+        gradeYear: _gradeYear,
+        specialtyId: _requiereEspecialidad ? _specialtyId : null,
+      );
       if (mounted) setState(() => _materiasDisponibles = data);
     } catch (_) {
-      if (mounted) setState(() => _error = 'No se pudieron cargar las materias del curso.');
+      if (mounted) setState(() => _error = 'No se pudieron cargar las materias.');
     } finally {
       if (mounted) setState(() => _materiasLoading = false);
     }
   }
 
   Future<void> _agregar() async {
-    if (_cursoSel == null || _materiaSel == null) {
-      setState(() => _error = 'Seleccioná el curso y la materia.');
+    if (_gradeYear == null) {
+      setState(() => _error = 'Seleccioná el año.');
+      return;
+    }
+    if (_requiereEspecialidad && _specialtyId == null) {
+      setState(() => _error = 'Seleccioná la especialidad.');
+      return;
+    }
+    if (_materiaSel == null || _cursoSel == null) {
+      setState(() => _error = 'Seleccioná la materia y el curso.');
       return;
     }
     setState(() { _submitting = true; _error = null; });
@@ -751,7 +813,12 @@ class _AsignacionesModalState extends State<_AsignacionesModal> {
       await widget.ds.asignarCourseSubjectTeacher(
         courseId: _cursoSel!.id, subjectId: _materiaSel!.id, teacherId: widget.teacher.id,
       );
-      if (mounted) setState(() { _cursoSel = null; _materiaSel = null; _materiasDisponibles = []; });
+      if (mounted) {
+        setState(() {
+          _gradeYear = null; _specialtyId = null;
+          _cursoSel = null; _materiaSel = null; _materiasDisponibles = [];
+        });
+      }
       await _cargar();
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -845,16 +912,28 @@ class _AsignacionesModalState extends State<_AsignacionesModal> {
                   const SizedBox(height: 12),
                   Text('Agregar asignación', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: theme.text)),
                   const SizedBox(height: 12),
-                  AAMLabeledDropdown<Course>(
-                    label: 'Curso',
-                    value: _cursoSel,
-                    options: _cursos,
-                    hint: 'Curso',
-                    itemLabel: (c) => c.name,
-                    onChanged: _onCursoChanged,
+                  AAMLabeledDropdown<int>(
+                    label: 'Año',
+                    value: _gradeYear,
+                    options: _aniosDisponibles,
+                    hint: 'Año',
+                    itemLabel: (y) => gradeYearOrdinal(y),
+                    onChanged: _onAnioChanged,
                   ),
+                  if (_requiereEspecialidad) ...[
+                    const SizedBox(height: 16),
+                    AAMLabeledDropdown<String>(
+                      label: 'Especialidad',
+                      value: _specialtyId,
+                      options: _especialidadesDisponibles.map((e) => e.key).toList(),
+                      hint: 'Especialidad',
+                      itemLabel: (id) => _especialidadesDisponibles.firstWhere((e) => e.key == id).value,
+                      onChanged: _onEspecialidadChanged,
+                    ),
+                  ],
                   const SizedBox(height: 16),
-                  if (_cursoSel != null && !_materiasLoading && _materiasDisponibles.isEmpty)
+                  if (_gradeYear != null && (!_requiereEspecialidad || _specialtyId != null) &&
+                      !_materiasLoading && _materiasDisponibles.isEmpty)
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -863,7 +942,7 @@ class _AsignacionesModalState extends State<_AsignacionesModal> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                          'Este curso no tiene materias habilitadas para su año/especialidad. Configuralas desde la sección Materias.',
+                          'No hay materias habilitadas para ese año/especialidad. Configuralas desde la sección Materias.',
                           style: GoogleFonts.dmSans(fontSize: 12, color: theme.textSec)),
                     )
                   else
@@ -871,10 +950,19 @@ class _AsignacionesModalState extends State<_AsignacionesModal> {
                       label: 'Materia',
                       value: _materiaSel,
                       options: _materiasDisponibles,
-                      hint: _cursoSel == null ? 'Elegí el curso primero' : 'Materia',
+                      hint: _gradeYear == null ? 'Elegí el año primero' : 'Materia',
                       itemLabel: (m) => '${m.name} (${subjectTypeLabel(m.subjectType)})',
-                      onChanged: _cursoSel == null ? null : (v) => setState(() => _materiaSel = v),
+                      onChanged: _gradeYear == null ? null : (v) => setState(() => _materiaSel = v),
                     ),
+                  const SizedBox(height: 16),
+                  AAMLabeledDropdown<Course>(
+                    label: 'Curso (división)',
+                    value: _cursoSel,
+                    options: _cursosFiltrados,
+                    hint: _gradeYear == null ? 'Elegí el año primero' : 'Curso',
+                    itemLabel: (c) => c.name,
+                    onChanged: _gradeYear == null ? null : (v) => setState(() => _cursoSel = v),
+                  ),
                   const SizedBox(height: 14),
                   if (_error != null) ...[
                     Text(_error!, style: GoogleFonts.dmSans(fontSize: 12, color: AAMColors.danger)),
