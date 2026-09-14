@@ -91,28 +91,50 @@ class Teacher {
     required this.fullName,
     this.email,
     this.phone,
+    this.status = 'active',
+    this.statusReason,
+    this.returnDate,
     this.assignments = const [],
   });
   final String id;
   final String fullName;
   final String? email;
   final String? phone;
+  final String status;
+  final String? statusReason;
+  final String? returnDate;
   // GET /teachers la trae embebida (ver backend) — permite mostrar la
   // columna "Materias asignadas" y filtrar por materia sin pedirlas
   // profesor por profesor. Vacía si el endpoint no la incluyó (respuesta
   // vieja en caché).
   final List<SubjectTeacherAssignment> assignments;
 
+  bool get isActive => status == 'active';
+  bool get isInactive => status == 'inactive';
+  bool get isMedicalLeave => status == 'medical_leave';
+  bool get isVacation => status == 'vacation';
+
   factory Teacher.fromJson(Map<String, dynamic> json) => Teacher(
         id: json['id'].toString(),
         fullName: json['full_name'],
         email: json['email'],
         phone: json['phone'],
+        status: (json['status'] as String?) ?? 'active',
+        statusReason: json['status_reason'],
+        returnDate: json['return_date'],
         assignments: ((json['assignments'] as List?) ?? const [])
             .map((j) => SubjectTeacherAssignment.fromJson(j as Map<String, dynamic>))
             .toList(),
       );
 }
+
+String teacherStatusLabel(String status) => switch (status) {
+      'active' => 'Activo',
+      'inactive' => 'De baja',
+      'medical_leave' => 'Licencia médica',
+      'vacation' => 'Vacaciones',
+      _ => status,
+    };
 
 /// Qué materia dicta qué profesor, EN un curso puntual.
 class SubjectTeacherAssignment {

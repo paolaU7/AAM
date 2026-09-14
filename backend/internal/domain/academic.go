@@ -99,10 +99,29 @@ type SubjectWithApplicability struct {
 
 // Teacher is a reference record for the schedule. No login.
 type Teacher struct {
-	ID       string
-	FullName string
-	Email    *string
-	Phone    *string
+	ID           string
+	FullName     string
+	Email        *string
+	Phone        *string
+	Status       string
+	StatusReason *string
+	ReturnDate   *string
+}
+
+const (
+	TeacherStatusActive       = "active"
+	TeacherStatusInactive     = "inactive"
+	TeacherStatusMedicalLeave = "medical_leave"
+	TeacherStatusVacation     = "vacation"
+)
+
+func ValidTeacherStatus(s string) bool {
+	switch s {
+	case TeacherStatusActive, TeacherStatusInactive, TeacherStatusMedicalLeave, TeacherStatusVacation:
+		return true
+	default:
+		return false
+	}
 }
 
 // SubjectTeacherAssignment is which subject a teacher teaches, in ONE course.

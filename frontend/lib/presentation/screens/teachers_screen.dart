@@ -19,12 +19,19 @@ class TeachersScreen extends StatefulWidget {
   State<TeachersScreen> createState() => _TeachersScreenState();
 }
 
+const double _kFiltroAltura = 40.0;
+
 class _TeachersScreenState extends State<TeachersScreen> with AutoRefreshMixin<TeachersScreen> {
   final ApiDatasource _ds = ApiDatasource();
 
   List<Teacher>? _profesores;
+  List<Subject> _materias = [];
   bool _loading = true;
   String? _error;
+
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = '';
+  String? _filterMateriaShortCode;
 
   @override
   void initState() {
@@ -34,18 +41,79 @@ class _TeachersScreenState extends State<TeachersScreen> with AutoRefreshMixin<T
   }
 
   @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   void onAutoRefresh() => _cargar(silent: true);
 
   Future<void> _cargar({bool silent = false}) async {
     if (!silent) setState(() { _loading = true; _error = null; });
     try {
       final data = await _ds.getTeachers();
-      if (mounted) setState(() { _profesores = data; _error = null; });
+      List<Subject> materias = [];
+      try {
+        materias = await _ds.getSubjects();
+      } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _profesores = data;
+          _materias = materias;
+          _error = null;
+        });
+      }
     } catch (_) {
       if (mounted && !silent) setState(() => _error = 'Error al cargar profesores');
     } finally {
       if (mounted && !silent) setState(() => _loading = false);
     }
+  }
+
+  List<String> get _shortCodesDisponibles {
+    final Set<String> codes = {};
+    for (final s in _materias) {
+      final c = s.shortCode.trim();
+      if (c.isNotEmpty) codes.add(c);
+    }
+    for (final p in _profesores ?? const <Teacher>[]) {
+      for (final a in p.assignments) {
+        final rawCode = a.subjectShortCode.trim();
+        final c = rawCode.isNotEmpty ? rawCode : a.subjectName.trim();
+        if (c.isNotEmpty) codes.add(c);
+      }
+    }
+    final list = codes.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return list;
+  }
+
+  bool get _hayFiltrosActivos =>
+      _searchQuery.isNotEmpty || _filterMateriaShortCode != null;
+
+  void _limpiarFiltros() {
+    setState(() {
+      _searchCtrl.clear();
+      _searchQuery = '';
+      _filterMateriaShortCode = null;
+    });
+  }
+
+  List<Teacher> _applyFilters(List<Teacher> profesores) {
+    final q = _searchQuery.trim().toLowerCase();
+    final filterCode = _filterMateriaShortCode?.trim().toLowerCase();
+    return profesores.where((p) {
+      final matchSearch = q.isEmpty ||
+          p.fullName.toLowerCase().contains(q) ||
+          (p.email != null && p.email!.toLowerCase().contains(q));
+      final matchMateria = filterCode == null ||
+          p.assignments.any((a) {
+            final rawCode = a.subjectShortCode.trim();
+            final code = rawCode.isNotEmpty ? rawCode : a.subjectName.trim();
+            return code.toLowerCase() == filterCode;
+          });
+      return matchSearch && matchMateria;
+    }).toList();
   }
 
   Future<void> _abrirNuevoProfesor() async {
@@ -65,6 +133,58 @@ class _TeachersScreenState extends State<TeachersScreen> with AutoRefreshMixin<T
     );
   }
 
+  Future<void> _editarProfesor(Teacher t) async {
+    final updated = await showDialog<Teacher>(
+      context: context,
+      barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
+      builder: (_) => _EditarProfesorForm(ds: _ds, teacher: t),
+    );
+    if (updated != null) _cargar();
+  }
+
+  Future<void> _gestionarLicencia(Teacher t) async {
+    final updated = await showDialog<Teacher>(
+      context: context,
+      barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
+      builder: (_) => _LicenciaProfesorForm(ds: _ds, teacher: t),
+    );
+    if (updated != null) _cargar();
+  }
+
+  Future<void> _darDeBaja(Teacher t) async {
+    final updated = await showDialog<Teacher>(
+      context: context,
+      barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
+      builder: (_) => _BajaProfesorForm(ds: _ds, teacher: t),
+    );
+    if (updated != null) _cargar();
+  }
+
+  Future<void> _reactivar(Teacher t) async {
+    try {
+      await _ds.cambiarEstadoTeacher(id: t.id, status: 'active');
+      _cargar();
+    } catch (e) {
+      if (mounted) _showError(context, e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
+  Future<void> _eliminarProfesor(Teacher t) async {
+    final ok = await showAamConfirmDialog(
+      context,
+      titulo: 'Eliminar profesor',
+      mensaje: '¿Eliminar a "${t.fullName}" definitivamente? Esta acción no se puede deshacer. '
+          'Si tiene materias asignadas o clases en el horario, no va a poder eliminarse.',
+    );
+    if (!ok) return;
+    try {
+      await _ds.eliminarTeacher(t.id);
+      _cargar();
+    } catch (e) {
+      if (mounted) _showError(context, e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -77,6 +197,8 @@ class _TeachersScreenState extends State<TeachersScreen> with AutoRefreshMixin<T
   }
 
   Widget _buildScreen(AAMTheme theme) {
+    final todas = _profesores ?? [];
+    final filtrados = _applyFilters(todas);
     return Column(children: [
       AAMTopbar(
         title: 'Profesores',
@@ -91,10 +213,91 @@ class _TeachersScreenState extends State<TeachersScreen> with AutoRefreshMixin<T
                 ? AAMErrorWidget(message: _error!, onRetry: _cargar)
                 : Padding(
                     padding: const EdgeInsets.all(32),
-                    child: _buildTabla(_profesores ?? [], theme),
+                    child: Column(children: [
+                      _buildFiltros(theme, todas.length, filtrados.length),
+                      const SizedBox(height: 20),
+                      Expanded(child: _buildTabla(filtrados, theme)),
+                    ]),
                   ),
       ),
     ]);
+  }
+
+  Widget _buildFiltros(AAMTheme theme, int total, int filtrado) {
+    return Row(children: [
+      Expanded(
+        child: SizedBox(
+          height: _kFiltroAltura,
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: theme.card,
+              border: Border.all(color: theme.borderCol),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: TextField(
+              controller: _searchCtrl,
+              onChanged: (v) => setState(() => _searchQuery = v),
+              textAlignVertical: TextAlignVertical.center,
+              style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
+              decoration: InputDecoration(
+                isCollapsed: true,
+                hintText: 'Buscar por nombre...',
+                hintStyle: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec),
+                prefixIcon: Icon(Icons.search, size: 18, color: theme.textSec),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+              ),
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(width: 12),
+      _filterBox(theme, AAMDropdown<String?>(
+        value: _filterMateriaShortCode,
+        options: <String?>[null, ..._shortCodesDisponibles],
+        itemLabel: (c) => c ?? 'Materia: todas',
+        fontSize: 13,
+        isDense: true,
+        onChanged: (v) => setState(() => _filterMateriaShortCode = v),
+      )),
+      const SizedBox(width: 12),
+      _buildLimpiarFiltros(theme),
+      const SizedBox(width: 12),
+      Text('$filtrado de $total profesores', style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
+    ]);
+  }
+
+  Widget _filterBox(AAMTheme theme, Widget child) {
+    return Container(
+      height: _kFiltroAltura,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: theme.card,
+        border: Border.all(color: theme.borderCol),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildLimpiarFiltros(AAMTheme theme) {
+    final activo = _hayFiltrosActivos;
+    return GestureDetector(
+      onTap: activo ? _limpiarFiltros : null,
+      child: MouseRegion(
+        cursor: activo ? SystemMouseCursors.click : MouseCursor.defer,
+        child: Opacity(
+          opacity: activo ? 1 : 0.4,
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.filter_alt_off_outlined, size: 16, color: AAMColors.danger),
+            const SizedBox(width: 6),
+            Text('Borrar filtros', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: AAMColors.danger)),
+          ]),
+        ),
+      ),
+    );
   }
 
   Widget _buildTabla(List<Teacher> profesores, AAMTheme theme) {
@@ -107,10 +310,11 @@ class _TeachersScreenState extends State<TeachersScreen> with AutoRefreshMixin<T
       child: Column(children: [
         const AAMTableHeader(columns: [
           ('Nombre', 3),
+          ('Estado', 2),
           ('Materias asignadas', 3),
-          ('Email', 3),
+          ('Email', 2),
           ('Teléfono', 2),
-          ('Acciones', 2),
+          ('Acciones', 3),
         ]),
         Expanded(
           child: profesores.isEmpty
@@ -119,9 +323,17 @@ class _TeachersScreenState extends State<TeachersScreen> with AutoRefreshMixin<T
                   children: [
                     Icon(Icons.person_outline, size: 40, color: theme.borderCol),
                     const SizedBox(height: 12),
-                    Text('No hay profesores cargados', style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec)),
+                    Text(
+                      _hayFiltrosActivos
+                          ? 'No hay profesores que coincidan con los filtros'
+                          : 'No hay profesores cargados',
+                      style: GoogleFonts.dmSans(fontSize: 14, color: theme.textSec),
+                    ),
                     const SizedBox(height: 8),
-                    AAMButton(label: 'Crear primer profesor', onPressed: _abrirNuevoProfesor),
+                    if (!_hayFiltrosActivos)
+                      AAMButton(label: 'Crear primer profesor', onPressed: _abrirNuevoProfesor)
+                    else
+                      AAMButton(label: 'Limpiar filtros', onPressed: _limpiarFiltros),
                   ],
                 ))
               : ListView.builder(
@@ -130,6 +342,11 @@ class _TeachersScreenState extends State<TeachersScreen> with AutoRefreshMixin<T
                     profesor: profesores[i],
                     theme: theme,
                     onVerAsignaciones: () => _verAsignaciones(profesores[i]),
+                    onEditar: () => _editarProfesor(profesores[i]),
+                    onLicencia: () => _gestionarLicencia(profesores[i]),
+                    onBaja: () => _darDeBaja(profesores[i]),
+                    onReactivar: () => _reactivar(profesores[i]),
+                    onEliminar: () => _eliminarProfesor(profesores[i]),
                   ),
                 ),
         ),
@@ -139,10 +356,25 @@ class _TeachersScreenState extends State<TeachersScreen> with AutoRefreshMixin<T
 }
 
 class _ProfesorRow extends StatefulWidget {
-  const _ProfesorRow({required this.profesor, required this.theme, required this.onVerAsignaciones});
+  const _ProfesorRow({
+    required this.profesor,
+    required this.theme,
+    required this.onVerAsignaciones,
+    required this.onEditar,
+    required this.onLicencia,
+    required this.onBaja,
+    required this.onReactivar,
+    required this.onEliminar,
+  });
+
   final Teacher profesor;
   final AAMTheme theme;
   final VoidCallback onVerAsignaciones;
+  final VoidCallback onEditar;
+  final VoidCallback onLicencia;
+  final VoidCallback onBaja;
+  final VoidCallback onReactivar;
+  final VoidCallback onEliminar;
 
   @override
   State<_ProfesorRow> createState() => _ProfesorRowState();
@@ -168,6 +400,7 @@ class _ProfesorRowState extends State<_ProfesorRow> {
           Expanded(flex: 3, child: Text(p.fullName,
               textAlign: TextAlign.center,
               style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: widget.theme.text))),
+          Expanded(flex: 2, child: Center(child: _TeacherStatusBadge(teacher: p, theme: widget.theme))),
           Expanded(flex: 3, child: Align(
             alignment: Alignment.center,
             child: GestureDetector(
@@ -187,14 +420,55 @@ class _ProfesorRowState extends State<_ProfesorRow> {
               ),
             ),
           )),
-          Expanded(flex: 3, child: Text(p.email ?? '—',
+          Expanded(flex: 2, child: Text(p.email ?? '—',
               textAlign: TextAlign.center,
               style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
           Expanded(flex: 2, child: Text(p.phone ?? '—',
               textAlign: TextAlign.center,
               style: GoogleFonts.dmSans(fontSize: 13, color: widget.theme.textSec))),
-          Expanded(flex: 2, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            _RowActionBtn(icon: Icons.assignment_outlined, tooltip: 'Ver asignaciones', onTap: widget.onVerAsignaciones),
+          Expanded(flex: 3, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            _RowActionBtn(
+              icon: Icons.assignment_outlined,
+              tooltip: 'Ver materias asignadas',
+              onTap: widget.onVerAsignaciones,
+            ),
+            const SizedBox(width: 8),
+            _RowActionBtn(
+              icon: Icons.edit_outlined,
+              color: AAMColors.accent,
+              tooltip: 'Editar profesor',
+              onTap: widget.onEditar,
+            ),
+            const SizedBox(width: 8),
+            _RowActionBtn(
+              icon: Icons.event_busy_outlined,
+              color: AAMColors.warning,
+              tooltip: 'Licencia / Vacaciones',
+              onTap: widget.onLicencia,
+            ),
+            const SizedBox(width: 8),
+            if (p.isInactive) ...[
+              _RowActionBtn(
+                icon: Icons.check_circle_outline,
+                color: AAMColors.success,
+                tooltip: 'Reactivar (dar de alta)',
+                onTap: widget.onReactivar,
+              ),
+              const SizedBox(width: 8),
+              _RowActionBtn(
+                icon: Icons.delete_outline,
+                color: AAMColors.danger,
+                tooltip: 'Eliminar definitivamente',
+                onTap: widget.onEliminar,
+              ),
+            ] else ...[
+              _RowActionBtn(
+                icon: Icons.block_outlined,
+                color: AAMColors.highlight,
+                tooltip: 'Dar de baja',
+                onTap: widget.onBaja,
+              ),
+            ],
           ])),
         ]),
       ),
@@ -225,10 +499,17 @@ class _ShortCodeChip extends StatelessWidget {
 }
 
 class _RowActionBtn extends StatefulWidget {
-  const _RowActionBtn({required this.icon, required this.tooltip, required this.onTap});
+  const _RowActionBtn({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.color,
+  });
+
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
+  final Color? color;
 
   @override
   State<_RowActionBtn> createState() => _RowActionBtnState();
@@ -239,6 +520,8 @@ class _RowActionBtnState extends State<_RowActionBtn> {
 
   @override
   Widget build(BuildContext context) {
+    final baseColor = widget.color != null ? widget.color!.withAlpha(180) : AAMColors.textSec;
+    final hoverColor = widget.color ?? AAMColors.accent;
     return Tooltip(
       message: widget.tooltip,
       child: MouseRegion(
@@ -247,10 +530,67 @@ class _RowActionBtnState extends State<_RowActionBtn> {
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
           onTap: widget.onTap,
-          child: Icon(widget.icon, size: 18, color: _hovered ? AAMColors.accent : AAMColors.textSec),
+          child: Icon(widget.icon, size: 18, color: _hovered ? hoverColor : baseColor),
         ),
       ),
     );
+  }
+}
+
+class _TeacherStatusBadge extends StatelessWidget {
+  const _TeacherStatusBadge({required this.teacher, required this.theme});
+  final Teacher teacher;
+  final AAMTheme theme;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, Color col) = switch (teacher.status) {
+      'active' => ('Activo', AAMColors.success),
+      'inactive' => ('De baja', AAMColors.danger),
+      'medical_leave' => ('Lic. médica', AAMColors.warning),
+      'vacation' => ('Vacaciones', AAMColors.primary),
+      _ => (teacher.status, theme.textSec),
+    };
+
+    Widget badge = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: col.withAlpha(20),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: col.withAlpha(80)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: col, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(label, style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: col)),
+        ],
+      ),
+    );
+
+    final tieneDetalle = (teacher.statusReason != null && teacher.statusReason!.trim().isNotEmpty) ||
+        (teacher.returnDate != null && teacher.returnDate!.trim().isNotEmpty);
+
+    if (tieneDetalle) {
+      final buffer = StringBuffer();
+      if (teacher.statusReason != null && teacher.statusReason!.trim().isNotEmpty) {
+        buffer.writeln('Motivo: ${teacher.statusReason}');
+      }
+      if (teacher.returnDate != null && teacher.returnDate!.trim().isNotEmpty) {
+        buffer.write('Retorno estimado: ${teacher.returnDate}');
+      }
+      return Tooltip(
+        message: buffer.toString().trim(),
+        child: badge,
+      );
+    }
+
+    return badge;
   }
 }
 
@@ -574,5 +914,425 @@ class _FieldGroup extends StatelessWidget {
       const SizedBox(height: 6),
       child,
     ]);
+  }
+}
+
+// ─── Modal Error ─────────────────────────────────────────────────────────────
+void _showError(BuildContext context, String mensaje) {
+  showDialog<void>(
+    context: context,
+    barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
+    builder: (_) => _TeacherErrorModal(mensaje: mensaje),
+  );
+}
+
+class _TeacherErrorModal extends StatelessWidget {
+  const _TeacherErrorModal({required this.mensaje});
+  final String mensaje;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AAMTheme();
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: 420,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: theme.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.borderCol),
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.error_outline, size: 22, color: AAMColors.danger),
+            const SizedBox(width: 10),
+            Expanded(child: Text('Acción bloqueada',
+                style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w700, color: theme.text))),
+          ]),
+          const SizedBox(height: 12),
+          Text(mensaje, style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec)),
+          const SizedBox(height: 20),
+          Align(
+            alignment: Alignment.centerRight,
+            child: AAMButton(
+              label: 'Entendido',
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ─── Modal Editar Profesor ────────────────────────────────────────────────────
+class _EditarProfesorForm extends StatefulWidget {
+  const _EditarProfesorForm({required this.ds, required this.teacher});
+  final ApiDatasource ds;
+  final Teacher teacher;
+
+  @override
+  State<_EditarProfesorForm> createState() => _EditarProfesorFormState();
+}
+
+class _EditarProfesorFormState extends State<_EditarProfesorForm> {
+  late final TextEditingController _nombreCtrl;
+  late final TextEditingController _emailCtrl;
+  late final TextEditingController _telefonoCtrl;
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _nombreCtrl = TextEditingController(text: widget.teacher.fullName);
+    _emailCtrl = TextEditingController(text: widget.teacher.email ?? '');
+    _telefonoCtrl = TextEditingController(text: widget.teacher.phone ?? '');
+  }
+
+  @override
+  void dispose() {
+    _nombreCtrl.dispose();
+    _emailCtrl.dispose();
+    _telefonoCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final nombre = _nombreCtrl.text.trim();
+    if (nombre.isEmpty) {
+      setState(() => _error = 'El nombre completo es obligatorio.');
+      return;
+    }
+    setState(() { _submitting = true; _error = null; });
+    try {
+      final updated = await widget.ds.actualizarTeacher(
+        id: widget.teacher.id,
+        fullName: nombre,
+        email: _emailCtrl.text.trim(),
+        phone: _telefonoCtrl.text.trim(),
+      );
+      if (mounted) Navigator.of(context).pop(updated);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AAMTheme();
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: 460,
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          color: theme.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.borderCol),
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text('Editar profesor',
+                style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w700, color: theme.text)),
+            IconButton(
+              icon: Icon(Icons.close, size: 20, color: theme.textSec),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ]),
+          const SizedBox(height: 18),
+          if (_error != null) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AAMColors.danger.withAlpha(25),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AAMColors.danger.withAlpha(80)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.error_outline, size: 16, color: AAMColors.danger),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_error!, style: GoogleFonts.dmSans(fontSize: 12, color: AAMColors.danger))),
+              ]),
+            ),
+            const SizedBox(height: 14),
+          ],
+          _inputGroup('Nombre completo *', AAMTextField(controller: _nombreCtrl, hintText: 'Ej. Juan Pérez')),
+          const SizedBox(height: 14),
+          _inputGroup('Email', AAMTextField(controller: _emailCtrl, hintText: 'juan.perez@escuela.edu.ar')),
+          const SizedBox(height: 14),
+          _inputGroup('Teléfono', AAMTextField(controller: _telefonoCtrl, hintText: 'Ej. 223-5551234')),
+          const SizedBox(height: 24),
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            AAMButton(
+              label: 'Cancelar',
+              variant: AAMButtonVariant.secondary,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            const SizedBox(width: 12),
+            AAMButton(
+              label: _submitting ? 'Guardando...' : 'Guardar cambios',
+              onPressed: _submitting ? null : _submit,
+            ),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  Widget _inputGroup(String label, Widget child) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: AAMTheme().textSec)),
+      const SizedBox(height: 6),
+      child,
+    ]);
+  }
+}
+
+// ─── Modal Licencia / Vacaciones ──────────────────────────────────────────────
+class _LicenciaProfesorForm extends StatefulWidget {
+  const _LicenciaProfesorForm({required this.ds, required this.teacher});
+  final ApiDatasource ds;
+  final Teacher teacher;
+
+  @override
+  State<_LicenciaProfesorForm> createState() => _LicenciaProfesorFormState();
+}
+
+class _LicenciaProfesorFormState extends State<_LicenciaProfesorForm> {
+  late String _status;
+  late final TextEditingController _motivoCtrl;
+  late final TextEditingController _retornoCtrl;
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _status = widget.teacher.status == 'inactive' ? 'medical_leave' : widget.teacher.status;
+    if (_status == 'active') _status = 'medical_leave';
+    _motivoCtrl = TextEditingController(text: widget.teacher.statusReason ?? '');
+    _retornoCtrl = TextEditingController(text: widget.teacher.returnDate ?? '');
+  }
+
+  @override
+  void dispose() {
+    _motivoCtrl.dispose();
+    _retornoCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() { _submitting = true; _error = null; });
+    try {
+      final updated = await widget.ds.cambiarEstadoTeacher(
+        id: widget.teacher.id,
+        status: _status,
+        reason: _motivoCtrl.text.trim(),
+        returnDate: _retornoCtrl.text.trim(),
+      );
+      if (mounted) Navigator.of(context).pop(updated);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AAMTheme();
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: 460,
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          color: theme.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.borderCol),
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text('Licencia o vacaciones',
+                style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w700, color: theme.text)),
+            IconButton(
+              icon: Icon(Icons.close, size: 20, color: theme.textSec),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+            'Profesor: ${widget.teacher.fullName}',
+            style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
+          ),
+          const SizedBox(height: 18),
+          if (_error != null) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AAMColors.danger.withAlpha(25),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AAMColors.danger.withAlpha(80)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.error_outline, size: 16, color: AAMColors.danger),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_error!, style: GoogleFonts.dmSans(fontSize: 12, color: AAMColors.danger))),
+              ]),
+            ),
+            const SizedBox(height: 14),
+          ],
+          _inputGroup('Estado asignado', AAMDropdown<String>(
+            value: _status,
+            options: const ['medical_leave', 'vacation', 'active'],
+            itemLabel: (s) => switch (s) {
+              'medical_leave' => 'Licencia médica',
+              'vacation' => 'Vacaciones',
+              'active' => 'Activo (finalizar licencia)',
+              _ => s,
+            },
+            isExpanded: true,
+            onChanged: (v) {
+              if (v != null) setState(() => _status = v);
+            },
+          )),
+          const SizedBox(height: 14),
+          _inputGroup('Motivo (opcional)', AAMTextField(controller: _motivoCtrl, hintText: 'Ej. Reposo por prescripción médica')),
+          const SizedBox(height: 14),
+          _inputGroup('Fecha estimada de retorno (AAAA-MM-DD)', AAMTextField(controller: _retornoCtrl, hintText: 'Ej. 2026-10-15')),
+          const SizedBox(height: 24),
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            AAMButton(
+              label: 'Cancelar',
+              variant: AAMButtonVariant.secondary,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            const SizedBox(width: 12),
+            AAMButton(
+              label: _submitting ? 'Guardando...' : 'Guardar',
+              onPressed: _submitting ? null : _submit,
+            ),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  Widget _inputGroup(String label, Widget child) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: AAMTheme().textSec)),
+      const SizedBox(height: 6),
+      child,
+    ]);
+  }
+}
+
+// ─── Modal Confirmar Baja ─────────────────────────────────────────────────────
+class _BajaProfesorForm extends StatefulWidget {
+  const _BajaProfesorForm({required this.ds, required this.teacher});
+  final ApiDatasource ds;
+  final Teacher teacher;
+
+  @override
+  State<_BajaProfesorForm> createState() => _BajaProfesorFormState();
+}
+
+class _BajaProfesorFormState extends State<_BajaProfesorForm> {
+  final _motivoCtrl = TextEditingController();
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _motivoCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() { _submitting = true; _error = null; });
+    try {
+      final updated = await widget.ds.cambiarEstadoTeacher(
+        id: widget.teacher.id,
+        status: 'inactive',
+        reason: _motivoCtrl.text.trim(),
+      );
+      if (mounted) Navigator.of(context).pop(updated);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AAMTheme();
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: 440,
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          color: theme.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.borderCol),
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.block_outlined, size: 22, color: AAMColors.highlight),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('Dar de baja profesor',
+                  style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w700, color: theme.text)),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          Text(
+            '¿Confirmas dar de baja a "${widget.teacher.fullName}"? El profesor pasará a estado inactivo.',
+            style: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
+          ),
+          const SizedBox(height: 16),
+          if (_error != null) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AAMColors.danger.withAlpha(25),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AAMColors.danger.withAlpha(80)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.error_outline, size: 16, color: AAMColors.danger),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_error!, style: GoogleFonts.dmSans(fontSize: 12, color: AAMColors.danger))),
+              ]),
+            ),
+            const SizedBox(height: 14),
+          ],
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Motivo de la baja (opcional)',
+                style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: theme.textSec)),
+            const SizedBox(height: 6),
+            AAMTextField(controller: _motivoCtrl, hintText: 'Ej. Renuncia, pase de institución...'),
+          ]),
+          const SizedBox(height: 24),
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            AAMButton(
+              label: 'Cancelar',
+              variant: AAMButtonVariant.secondary,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            const SizedBox(width: 12),
+            AAMButton(
+              label: _submitting ? 'Procesando...' : 'Confirmar baja',
+              onPressed: _submitting ? null : _submit,
+            ),
+          ]),
+        ]),
+      ),
+    );
   }
 }

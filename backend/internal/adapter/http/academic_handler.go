@@ -19,6 +19,9 @@ func (s *Server) mountAcademic(r chi.Router) {
 
 	r.Get("/teachers", s.listTeachers)
 	r.Post("/teachers", s.createTeacher)
+	r.Put("/teachers/{id}", s.updateTeacher)
+	r.Patch("/teachers/{id}/status", s.updateTeacherStatus)
+	r.Delete("/teachers/{id}", s.deleteTeacher)
 	r.Get("/teachers/{id}/assignments", s.listTeacherAssignments)
 }
 
@@ -202,6 +205,63 @@ func (s *Server) createTeacher(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, toTeacherDTO(t))
+}
+
+func (s *Server) updateTeacher(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		FullName string  `json:"full_name"`
+		Email    *string `json:"email"`
+		Phone    *string `json:"phone"`
+	}
+	if err := decodeJSON(r, &b); err != nil {
+		writeErr(w, err)
+		return
+	}
+	t, err := s.Academic.UpdateTeacher(r.Context(), urlParam(r, "id"), b.FullName, b.Email, b.Phone)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if t == nil {
+		detail(w, http.StatusNotFound, "No encontrado")
+		return
+	}
+	writeJSON(w, http.StatusOK, toTeacherDTO(*t))
+}
+
+func (s *Server) updateTeacherStatus(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Status     string  `json:"status"`
+		Reason     *string `json:"reason"`
+		ReturnDate *string `json:"return_date"`
+	}
+	if err := decodeJSON(r, &b); err != nil {
+		writeErr(w, err)
+		return
+	}
+	t, err := s.Academic.UpdateTeacherStatus(r.Context(), urlParam(r, "id"), b.Status, b.Reason, b.ReturnDate)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if t == nil {
+		detail(w, http.StatusNotFound, "No encontrado")
+		return
+	}
+	writeJSON(w, http.StatusOK, toTeacherDTO(*t))
+}
+
+func (s *Server) deleteTeacher(w http.ResponseWriter, r *http.Request) {
+	ok, err := s.Academic.DeleteTeacher(r.Context(), urlParam(r, "id"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if !ok {
+		detail(w, http.StatusNotFound, "No encontrado")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) listTeacherAssignments(w http.ResponseWriter, r *http.Request) {

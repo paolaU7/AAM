@@ -222,6 +222,26 @@ func (s AcademicService) CreateTeacher(ctx context.Context, fullName string, ema
 	return s.Teachers.Create(ctx, fullName, nilIfEmpty(email), nilIfEmpty(phone))
 }
 
+func (s AcademicService) UpdateTeacher(ctx context.Context, id, fullName string, email, phone *string) (*domain.Teacher, error) {
+	fullName = strings.TrimSpace(fullName)
+	if fullName == "" {
+		return nil, domain.NewDomainError("El nombre del profesor es obligatorio.", 400)
+	}
+	return s.Teachers.Update(ctx, id, fullName, nilIfEmpty(email), nilIfEmpty(phone))
+}
+
+func (s AcademicService) UpdateTeacherStatus(ctx context.Context, id, status string, reason, returnDate *string) (*domain.Teacher, error) {
+	status = strings.TrimSpace(status)
+	if !domain.ValidTeacherStatus(status) {
+		return nil, domain.NewDomainError("Estado inválido. Debe ser 'active', 'inactive', 'medical_leave' o 'vacation'.", 400)
+	}
+	return s.Teachers.UpdateStatus(ctx, id, status, nilIfEmpty(reason), nilIfEmpty(returnDate))
+}
+
+func (s AcademicService) DeleteTeacher(ctx context.Context, id string) (bool, error) {
+	return s.Teachers.Delete(ctx, id)
+}
+
 func (s AcademicService) TeacherAssignments(ctx context.Context, teacherID string) ([]domain.SubjectTeacherAssignment, error) {
 	return s.CourseSubject.GetByTeacher(ctx, teacherID)
 }

@@ -98,7 +98,7 @@ class AAMTopbar extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              if (actions != null) ...actions!,
+              ...?actions,
               const SizedBox(width: 12),
               const NotificationBell(),
               const SizedBox(width: 12),
@@ -188,7 +188,59 @@ class AAMBadge extends StatelessWidget {
   }
 }
 
+// ─── Text Field ───────────────────────────────────────────────────────────────
+/// Campo de texto estilizado para formularios — reemplaza el helper `_input`
+/// que se repetía en cada pantalla. Usa los tokens de [AAMTheme] para que se
+/// adapte a modo oscuro automáticamente.
+class AAMTextField extends StatelessWidget {
+  const AAMTextField({
+    super.key,
+    required this.controller,
+    this.hintText,
+    this.keyboardType,
+    this.maxLines = 1,
+    this.obscureText = false,
+  });
+
+  final TextEditingController controller;
+  final String? hintText;
+  final TextInputType? keyboardType;
+  final int maxLines;
+  final bool obscureText;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: AAMTheme(),
+      builder: (context, _) {
+        final theme = AAMTheme();
+        return Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: theme.borderCol),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: TextField(
+            controller: controller,
+            keyboardType: keyboardType,
+            maxLines: maxLines,
+            obscureText: obscureText,
+            style: GoogleFonts.dmSans(fontSize: 14, color: theme.text),
+            decoration: InputDecoration(
+              hintText: hintText,
+              hintStyle: GoogleFonts.dmSans(fontSize: 13, color: theme.textSec),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 // ─── Botón primario ───────────────────────────────────────────────────────────
+enum AAMButtonVariant { primary, secondary }
+
 class AAMButton extends StatefulWidget {
   const AAMButton({
     super.key,
@@ -196,11 +248,13 @@ class AAMButton extends StatefulWidget {
     this.icon,
     this.onPressed,
     this.outlined = false,
+    this.variant = AAMButtonVariant.primary,
   });
   final String label;
   final IconData? icon;
   final VoidCallback? onPressed;
   final bool outlined;
+  final AAMButtonVariant variant;
 
   @override
   State<AAMButton> createState() => _AAMButtonState();
@@ -208,6 +262,8 @@ class AAMButton extends StatefulWidget {
 
 class _AAMButtonState extends State<AAMButton> {
   bool _hovered = false;
+
+  bool get _isOutlined => widget.outlined || widget.variant == AAMButtonVariant.secondary;
 
   @override
   Widget build(BuildContext context) {
@@ -225,10 +281,10 @@ class _AAMButtonState extends State<AAMButton> {
               duration: const Duration(milliseconds: 140),
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
               decoration: BoxDecoration(
-                color: widget.outlined
+                color: _isOutlined
                     ? (_hovered ? AAMColors.primary : Colors.transparent)
                     : (_hovered ? const Color(0xFF35B5D4) : AAMColors.accent),
-                border: widget.outlined
+                border: _isOutlined
                     ? Border.all(color: theme.text, width: 2)
                     : null,
                 borderRadius: BorderRadius.circular(10),
@@ -237,7 +293,7 @@ class _AAMButtonState extends State<AAMButton> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (widget.icon != null) ...[
-                    Icon(widget.icon, size: 16, color: widget.outlined
+                    Icon(widget.icon, size: 16, color: _isOutlined
                       ? (_hovered ? AAMColors.white : theme.text)
                       : AAMColors.white),
                     const SizedBox(width: 8),
@@ -246,7 +302,7 @@ class _AAMButtonState extends State<AAMButton> {
                     widget.label,
                     style: GoogleFonts.dmSans(
                       fontSize: 14, fontWeight: FontWeight.w600,
-                      color: widget.outlined
+                      color: _isOutlined
                           ? (_hovered ? AAMColors.white : theme.text)
                           : AAMColors.white,
                     ),

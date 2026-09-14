@@ -135,7 +135,11 @@ type SubjectApplicabilityRepo interface {
 // TeacherRepo persists `teachers`.
 type TeacherRepo interface {
 	GetAll(ctx context.Context, subjectID *string) ([]Teacher, error)
+	GetByID(ctx context.Context, id string) (*Teacher, error)
 	Create(ctx context.Context, fullName string, email, phone *string) (Teacher, error)
+	Update(ctx context.Context, id string, fullName string, email, phone *string) (*Teacher, error)
+	UpdateStatus(ctx context.Context, id string, status string, reason *string, returnDate *string) (*Teacher, error)
+	Delete(ctx context.Context, id string) (bool, error)
 }
 
 // CourseSubjectTeacherRepo persists `course_subject_teachers`.

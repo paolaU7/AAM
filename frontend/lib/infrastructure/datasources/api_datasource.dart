@@ -533,7 +533,59 @@ class ApiDatasource {
         )
         .timeout(const Duration(seconds: 10));
     if (response.statusCode == 201) return Teacher.fromJson(jsonDecode(response.body));
-    throw ApiException('No se pudo crear el profesor.');
+    throw _detailError(response, 'No se pudo crear el profesor.');
+  }
+
+  Future<Teacher> actualizarTeacher({
+    required String id,
+    required String fullName,
+    String? email,
+    String? phone,
+  }) async {
+    final body = {
+      'full_name': fullName,
+      'email': (email != null && email.isNotEmpty) ? email : null,
+      'phone': (phone != null && phone.isNotEmpty) ? phone : null,
+    };
+    final response = await http
+        .put(
+          Uri.parse('$baseUrl/teachers/$id'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) return Teacher.fromJson(jsonDecode(response.body));
+    throw _detailError(response, 'No se pudo actualizar el profesor.');
+  }
+
+  Future<Teacher> cambiarEstadoTeacher({
+    required String id,
+    required String status,
+    String? reason,
+    String? returnDate,
+  }) async {
+    final body = {
+      'status': status,
+      if (reason != null && reason.isNotEmpty) 'reason': reason,
+      if (returnDate != null && returnDate.isNotEmpty) 'return_date': returnDate,
+    };
+    final response = await http
+        .patch(
+          Uri.parse('$baseUrl/teachers/$id/status'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) return Teacher.fromJson(jsonDecode(response.body));
+    throw _detailError(response, 'No se pudo cambiar el estado del profesor.');
+  }
+
+  Future<void> eliminarTeacher(String id) async {
+    final response = await http
+        .delete(Uri.parse('$baseUrl/teachers/$id'))
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode == 204) return;
+    throw _detailError(response, 'No se pudo eliminar el profesor.');
   }
 
   /// Todas las asignaciones (curso + materia) de UN profesor — ficha de

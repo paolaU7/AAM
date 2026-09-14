@@ -100,10 +100,13 @@ type subjectWithApplicabilityDTO struct {
 }
 
 type teacherDTO struct {
-	ID       string  `json:"id"`
-	FullName string  `json:"full_name"`
-	Email    *string `json:"email"`
-	Phone    *string `json:"phone"`
+	ID           string  `json:"id"`
+	FullName     string  `json:"full_name"`
+	Email        *string `json:"email"`
+	Phone        *string `json:"phone"`
+	Status       string  `json:"status"`
+	StatusReason *string `json:"status_reason"`
+	ReturnDate   *string `json:"return_date"`
 }
 
 // teacherWithAssignmentsDTO is what GET /teachers returns: the parity shape
@@ -111,11 +114,14 @@ type teacherDTO struct {
 // a "materias asignadas" column (and filter by materia) without a request
 // per row. Additive over teacherDTO.
 type teacherWithAssignmentsDTO struct {
-	ID          string              `json:"id"`
-	FullName    string              `json:"full_name"`
-	Email       *string             `json:"email"`
-	Phone       *string             `json:"phone"`
-	Assignments []subjectTeacherDTO `json:"assignments"`
+	ID           string              `json:"id"`
+	FullName     string              `json:"full_name"`
+	Email        *string             `json:"email"`
+	Phone        *string             `json:"phone"`
+	Status       string              `json:"status"`
+	StatusReason *string             `json:"status_reason"`
+	ReturnDate   *string             `json:"return_date"`
+	Assignments  []subjectTeacherDTO `json:"assignments"`
 }
 
 type subjectTeacherDTO struct {
@@ -148,13 +154,27 @@ func toSubjectWithApplicabilityDTO(s domain.SubjectWithApplicability) subjectWit
 }
 
 func toTeacherDTO(t domain.Teacher) teacherDTO {
-	return teacherDTO{t.ID, t.FullName, t.Email, t.Phone}
+	return teacherDTO{
+		ID:           t.ID,
+		FullName:     t.FullName,
+		Email:        t.Email,
+		Phone:        t.Phone,
+		Status:       t.Status,
+		StatusReason: t.StatusReason,
+		ReturnDate:   t.ReturnDate,
+	}
 }
 
 func toTeacherWithAssignmentsDTO(t domain.TeacherWithAssignments) teacherWithAssignmentsDTO {
 	return teacherWithAssignmentsDTO{
-		ID: t.ID, FullName: t.FullName, Email: t.Email, Phone: t.Phone,
-		Assignments: mapList(t.Assignments, toSubjectTeacherDTO),
+		ID:           t.ID,
+		FullName:     t.FullName,
+		Email:        t.Email,
+		Phone:        t.Phone,
+		Status:       t.Status,
+		StatusReason: t.StatusReason,
+		ReturnDate:   t.ReturnDate,
+		Assignments:  mapList(t.Assignments, toSubjectTeacherDTO),
 	}
 }
 

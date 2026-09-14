@@ -426,6 +426,9 @@ CREATE TABLE teachers (
     full_name       TEXT NOT NULL,
     email           TEXT,
     phone           TEXT,
+    status          VARCHAR(30) NOT NULL DEFAULT 'active',
+    status_reason   TEXT,
+    return_date     DATE,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

@@ -2,7 +2,9 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -248,7 +250,12 @@ func NewTeacherRepo(pool *pgxpool.Pool) *TeacherRepo { return &TeacherRepo{pool}
 
 func scanTeacher(row pgx.Row) (domain.Teacher, error) {
 	var t domain.Teacher
-	err := row.Scan(&t.ID, &t.FullName, &t.Email, &t.Phone)
+	var returnDate *time.Time
+	err := row.Scan(&t.ID, &t.FullName, &t.Email, &t.Phone, &t.Status, &t.StatusReason, &returnDate)
+	if returnDate != nil {
+		d := returnDate.Format("2006-01-02")
+		t.ReturnDate = &d
+	}
 	return t, err
 }
 
@@ -256,14 +263,14 @@ func (r *TeacherRepo) GetAll(ctx context.Context, subjectID *string) ([]domain.T
 	var q string
 	var args []any
 	if subjectID != nil && *subjectID != "" {
-		q = `SELECT t.id, t.full_name, t.email, t.phone 
+		q = `SELECT t.id, t.full_name, t.email, t.phone, t.status, t.status_reason, t.return_date 
 		     FROM teachers t
 		     JOIN teacher_subjects ts ON ts.teacher_id = t.id
 		     WHERE ts.subject_id = $1
 		     ORDER BY t.full_name`
 		args = append(args, *subjectID)
 	} else {
-		q = `SELECT id, full_name, email, phone FROM teachers ORDER BY full_name`
+		q = `SELECT id, full_name, email, phone, status, status_reason, return_date FROM teachers ORDER BY full_name`
 	}
 	rows, err := r.pool.Query(ctx, q, args...)
 	if err != nil {
@@ -281,15 +288,92 @@ func (r *TeacherRepo) GetAll(ctx context.Context, subjectID *string) ([]domain.T
 	return out, rows.Err()
 }
 
+func (r *TeacherRepo) GetByID(ctx context.Context, id string) (*domain.Teacher, error) {
+	t, err := scanTeacher(r.pool.QueryRow(ctx,
+		`SELECT id, full_name, email, phone, status, status_reason, return_date FROM teachers WHERE id = $1`, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, mapDBError(err, "Error al buscar el profesor.")
+	}
+	return &t, nil
+}
+
 func (r *TeacherRepo) Create(ctx context.Context, fullName string, email, phone *string) (domain.Teacher, error) {
 	t, err := scanTeacher(r.pool.QueryRow(ctx,
-		`INSERT INTO teachers (full_name, email, phone) VALUES ($1, $2, $3)
-		 RETURNING id, full_name, email, phone`,
+		`INSERT INTO teachers (full_name, email, phone, status) VALUES ($1, $2, $3, 'active')
+		 RETURNING id, full_name, email, phone, status, status_reason, return_date`,
 		fullName, derefStr(email), derefStr(phone)))
 	if err != nil {
 		return domain.Teacher{}, mapDBError(err, "No se pudo crear el profesor.")
 	}
 	return t, nil
+}
+
+func (r *TeacherRepo) Update(ctx context.Context, id string, fullName string, email, phone *string) (*domain.Teacher, error) {
+	t, err := scanTeacher(r.pool.QueryRow(ctx,
+		`UPDATE teachers 
+		 SET full_name = $1, email = $2, phone = $3 
+		 WHERE id = $4 
+		 RETURNING id, full_name, email, phone, status, status_reason, return_date`,
+		fullName, derefStr(email), derefStr(phone), id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, mapDBError(err, "No se pudo actualizar el profesor.")
+	}
+	return &t, nil
+}
+
+func (r *TeacherRepo) UpdateStatus(ctx context.Context, id string, status string, reason *string, returnDate *string) (*domain.Teacher, error) {
+	var rDate *time.Time
+	if returnDate != nil && *returnDate != "" {
+		parsed, err := time.Parse("2006-01-02", *returnDate)
+		if err == nil {
+			rDate = &parsed
+		}
+	}
+	t, err := scanTeacher(r.pool.QueryRow(ctx,
+		`UPDATE teachers 
+		 SET status = $1, status_reason = $2, return_date = $3 
+		 WHERE id = $4 
+		 RETURNING id, full_name, email, phone, status, status_reason, return_date`,
+		status, derefStr(reason), rDate, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, mapDBError(err, "No se pudo actualizar el estado del profesor.")
+	}
+	return &t, nil
+}
+
+func (r *TeacherRepo) Delete(ctx context.Context, id string) (bool, error) {
+	var countCST int
+	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM course_subject_teachers WHERE teacher_id = $1`, id).Scan(&countCST)
+	if err != nil {
+		return false, mapDBError(err, "Error al verificar dependencias del profesor.")
+	}
+	if countCST > 0 {
+		return false, domain.NewDomainError("No se puede eliminar: el profesor tiene materias asignadas a cursos.", 400)
+	}
+
+	var countCP int
+	err = r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM class_periods WHERE teacher_id = $1`, id).Scan(&countCP)
+	if err != nil {
+		return false, mapDBError(err, "Error al verificar dependencias de clases.")
+	}
+	if countCP > 0 {
+		return false, domain.NewDomainError("No se puede eliminar: el profesor tiene clases asignadas en el horario.", 400)
+	}
+
+	tag, err := r.pool.Exec(ctx, `DELETE FROM teachers WHERE id = $1`, id)
+	if err != nil {
+		return false, mapDBError(err, "No se pudo eliminar el profesor.")
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
 // ── course_subject_teachers ──────────────────────────────────────────────────
